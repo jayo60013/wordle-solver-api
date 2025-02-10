@@ -1,6 +1,6 @@
 mod filters;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::io::BufRead;
 use std::sync::OnceLock;
 use std::{fs::File, io};
@@ -12,30 +12,44 @@ use filters::{filter_by_green_letters, filter_by_grey_letters, filter_by_yellow_
 const FILENAME: &str = "word_list.txt";
 static WORD_LIST: OnceLock<Vec<String>> = OnceLock::new();
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 struct LetterConstraints {
     grey_letters: Vec<char>,
     yellow_letters: Vec<(char, usize)>,
     green_letters: Vec<(char, usize)>,
 }
 
+#[derive(Serialize)]
+struct PossibleWords {
+    word_list: Vec<String>,
+    number_of_words: usize,
+}
+
 #[get("/all-words")]
 async fn all_words() -> impl Responder {
     let word_list = WORD_LIST.get().expect("Global word list not set");
-    HttpResponse::Ok().json(word_list)
+    HttpResponse::Ok().json(PossibleWords {
+        word_list: word_list.clone(),
+        number_of_words: word_list.len(),
+    })
 }
 
 #[post("/possible-words")]
 async fn possible_words(letter_constraints: web::Json<LetterConstraints>) -> impl Responder {
     let word_list = WORD_LIST.get().expect("Global word list not set");
 
-    let possible_word_list: Vec<&String> = word_list
+    let possible_word_list: Vec<String> = word_list
         .iter()
         .filter(|word| filter_by_grey_letters(word, &letter_constraints.grey_letters))
         .filter(|word| filter_by_yellow_letters(word, &letter_constraints.yellow_letters))
         .filter(|word| filter_by_green_letters(word, &letter_constraints.green_letters))
+        .cloned()
         .collect();
-    HttpResponse::Ok().json(possible_word_list)
+    let number_of_words = possible_word_list.len();
+    HttpResponse::Ok().json(PossibleWords {
+        word_list: possible_word_list,
+        number_of_words,
+    })
 }
 
 #[actix_web::main]
