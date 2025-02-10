@@ -12,11 +12,7 @@ Wordle word list obtained [here](https://gist.github.com/dracos/dd0668f281e685ba
 ### Example Payload
 ```json
 {
-  "incorrectLetters": [
-    "a",
-    "b",
-    "c"
-  ],
+  "incorrectLetters": [ "a", "b", "c" ],
   "yellowLetters": [
     { "letter": "d", "position": 1 },
     { "letter": "e", "position": 1 }
