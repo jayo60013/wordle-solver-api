@@ -28,6 +28,6 @@ Wordle word list obtained [here](https://gist.github.com/dracos/dd0668f281e685ba
 ```
 
 ## Road Map
-[x] Get possible words based off letter constraints
-[] Get best next guess
-[] Analyse the way the game was played
+- [x] Get possible words based off letter constraints
+- [ ] Get best next guess
+- [ ] Analyse the way the game was played
