@@ -1,29 +1,19 @@
 mod filters;
+mod models;
 
-use serde::{Deserialize, Serialize};
+use actix_cors::Cors;
+use actix_web::middleware::Logger;
 use std::io::BufRead;
 use std::sync::OnceLock;
 use std::{fs::File, io};
 
 use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
 
-use filters::{filter_by_green_letters, filter_by_grey_letters, filter_by_yellow_letters};
+use crate::filters::filter_by_letter_contraints;
+use crate::models::{LetterConstraints, PossibleWords};
 
 const FILENAME: &str = "word_list.txt";
 static WORD_LIST: OnceLock<Vec<String>> = OnceLock::new();
-
-#[derive(Deserialize)]
-struct LetterConstraints {
-    grey_letters: Vec<char>,
-    yellow_letters: Vec<(char, usize)>,
-    green_letters: Vec<(char, usize)>,
-}
-
-#[derive(Serialize)]
-struct PossibleWords {
-    word_list: Vec<String>,
-    number_of_words: usize,
-}
 
 #[get("/all-words")]
 async fn all_words() -> impl Responder {
@@ -38,13 +28,8 @@ async fn all_words() -> impl Responder {
 async fn possible_words(letter_constraints: web::Json<LetterConstraints>) -> impl Responder {
     let word_list = WORD_LIST.get().expect("Global word list not set");
 
-    let possible_word_list: Vec<String> = word_list
-        .iter()
-        .filter(|word| filter_by_grey_letters(word, &letter_constraints.grey_letters))
-        .filter(|word| filter_by_yellow_letters(word, &letter_constraints.yellow_letters))
-        .filter(|word| filter_by_green_letters(word, &letter_constraints.green_letters))
-        .cloned()
-        .collect();
+    let possible_word_list: Vec<String> =
+        filter_by_letter_contraints(word_list, letter_constraints.0);
     let number_of_words = possible_word_list.len();
     HttpResponse::Ok().json(PossibleWords {
         word_list: possible_word_list,
@@ -55,10 +40,16 @@ async fn possible_words(letter_constraints: web::Json<LetterConstraints>) -> imp
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     set_word_list(FILENAME)?;
-    HttpServer::new(|| App::new().service(all_words).service(possible_words))
-        .bind(("localhost", 5307))?
-        .run()
-        .await
+    HttpServer::new(|| {
+        App::new()
+            .wrap(Logger::default())
+            .wrap(Cors::permissive())
+            .service(all_words)
+            .service(possible_words)
+    })
+    .bind(("localhost", 5307))?
+    .run()
+    .await
 }
 
 fn set_word_list(filename: &str) -> io::Result<()> {

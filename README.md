@@ -9,6 +9,7 @@ Wordle word list obtained [here](https://gist.github.com/dracos/dd0668f281e685ba
 
 - `POST /possible-words` - returns all possible words based on the constraints given by grey, yellow and green letters.
 
+TODO: add input and output payloads
 ### Example Payload
 ```json
 {
