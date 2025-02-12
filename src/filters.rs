@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use crate::models::LetterConstraints;
 
 pub fn filter_by_letter_contraints(
-    words: &Vec<String>,
+    words: &[String],
     letter_constraints: LetterConstraints,
 ) -> Vec<String> {
     words
