@@ -9,6 +9,13 @@ pub struct LetterConstraints {
 
 #[derive(Serialize)]
 pub struct PossibleWords {
-    pub word_list: Vec<String>,
+    pub word_list: Vec<Word>,
     pub number_of_words: usize,
+    pub total_number_of_words: usize,
+}
+
+#[derive(Clone, Serialize)]
+pub struct Word {
+    pub word: String,
+    pub entropy: f32,
 }

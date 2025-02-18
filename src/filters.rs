@@ -1,6 +1,19 @@
 use std::collections::HashSet;
 
-use crate::models::LetterConstraints;
+use crate::models::{LetterConstraints, Word};
+
+pub fn filter_words_by_letter_contraints(
+    words: &[Word],
+    letter_constraints: LetterConstraints,
+) -> Vec<Word> {
+    words
+        .iter()
+        .filter(|word| filter_by_green_letters(&word.word, &letter_constraints.green_letters))
+        .filter(|word| filter_by_yellow_letters(&word.word, &letter_constraints.yellow_letters))
+        .filter(|word| filter_by_grey_letters(&word.word, &letter_constraints))
+        .cloned()
+        .collect()
+}
 
 pub fn filter_by_letter_contraints(
     words: &[String],
