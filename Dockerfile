@@ -24,7 +24,7 @@ COPY . .
 RUN cargo build --release
 
 # Use a slim runtime image
-FROM debian:buster-slim
+FROM debian:bookworm-slim
 
 # Install necessary runtime dependencies
 RUN apt-get update && \
