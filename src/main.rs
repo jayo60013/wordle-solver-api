@@ -55,7 +55,7 @@ async fn main() -> std::io::Result<()> {
             .service(all_words)
             .service(possible_words)
     })
-    .bind(("localhost", 5307))?
+    .bind(("0.0.0.0", 5307))?
     .run()
     .await
 }
