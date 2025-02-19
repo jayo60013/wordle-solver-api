@@ -23,8 +23,14 @@ jobs:
       - name: Cache Dependencies
         uses: Swatinem/rust-cache@v2
 
+      - name: Install Tarpaulin
+        run: cargo install cargo-tarpaulin
+
       - name: Run Clippy (Linter)
         run: cargo clippy -- -D warnings
 
       - name: Run Tests
         run: cargo test --verbose
+
+      - name: Run Code Coverage with Tarpaulin
+        run: cargo tarpaulin --fail-under 100 --exclude-files src/main.rs

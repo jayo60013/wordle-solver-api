@@ -51,6 +51,7 @@ fn filter_by_yellow_letters(word: &str, yellow_letters: &[(char, usize)]) -> boo
         .all(|(letter, position)| word.chars().nth(*position) != Some(*letter))
 }
 
+//TODO: If there a yellow 'a' and a grey 'a'. This means theres 1 'a'
 fn filter_by_grey_letters(word: &str, letter_constraints: &LetterConstraints) -> bool {
     // If grey letter - 'a' exists but also green or letter 'a', then we ignore it
     // as we can safely assume previous filters have sorted it
@@ -96,6 +97,68 @@ fn filter_by_grey_letters(word: &str, letter_constraints: &LetterConstraints) ->
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_filter_words_by_letter_constraints() {
+        // Given
+        let letter_constraints = LetterConstraints {
+            grey_letters: vec!['u', 'n', 'd', 'l', 'e', 'r', 'm'],
+            yellow_letters: vec![('s', 0)],
+            green_letters: vec![('o', 1), ('s', 2), ('s', 3), ('y', 4)],
+        };
+        let input_words = vec![
+            Word {
+                word: "bossy".to_string(),
+                entropy: 0.2,
+            },
+            Word {
+                word: "tossy".to_string(),
+                entropy: 0.3,
+            },
+            Word {
+                word: "mossy".to_string(),
+                entropy: 0.4,
+            },
+        ];
+        let expected_words = vec![
+            Word {
+                word: "bossy".to_string(),
+                entropy: 0.2,
+            },
+            Word {
+                word: "tossy".to_string(),
+                entropy: 0.3,
+            },
+        ];
+
+        // When
+        let actual_words = filter_words_by_letter_contraints(&input_words, letter_constraints);
+
+        // Then
+        assert_eq!(actual_words, expected_words);
+    }
+
+    #[test]
+    fn test_filter_by_letter_constraints() {
+        // Given
+        let letter_constraints = LetterConstraints {
+            grey_letters: vec!['i', 'n', 'd', 'e', 'r', 's', 'f', 't'],
+            yellow_letters: vec![('o', 0), ('a', 2), ('l', 3), ('a', 0), ('l', 1), ('o', 2)],
+            green_letters: vec![],
+        };
+        let input_words = vec![
+            "loyal".to_string(),
+            "vocal".to_string(),
+            "mossy".to_string(),
+        ];
+        let expected_words = vec!["loyal".to_string(), "vocal".to_string()];
+
+        // When
+        let actual_words = filter_by_letter_contraints(&input_words, letter_constraints);
+
+        // Then
+        assert_eq!(actual_words, expected_words);
+    }
 
     #[test]
     fn test_filter_by_green_letters_does_not_contain_letter() {

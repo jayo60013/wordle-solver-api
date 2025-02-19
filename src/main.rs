@@ -9,6 +9,7 @@ use std::time::SystemTime;
 use std::{fs::File, io};
 
 use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
+use std::env;
 
 use crate::filters::{filter_by_letter_contraints, filter_words_by_letter_contraints};
 use crate::models::{LetterConstraints, PossibleWords, Word};
@@ -42,6 +43,9 @@ async fn possible_words(letter_constraints: web::Json<LetterConstraints>) -> imp
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    env::set_var("RUST_LOG", "actix_web=info");
+    env_logger::init();
+
     let end = SystemTime::now();
     set_word_list(FILENAME)?;
     let duration = end.elapsed();

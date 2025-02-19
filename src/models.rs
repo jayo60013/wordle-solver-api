@@ -14,7 +14,7 @@ pub struct PossibleWords {
     pub total_number_of_words: usize,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Debug, PartialEq, PartialOrd, Clone, Serialize)]
 pub struct Word {
     pub word: String,
     pub entropy: f32,
