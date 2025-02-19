@@ -45,10 +45,12 @@ async fn main() -> std::io::Result<()> {
     env::set_var("RUST_LOG", "actix_web=info");
     env_logger::init();
 
-    let end = SystemTime::now();
+    println!("starting set_word_list");
+    let start = SystemTime::now();
     set_word_list(FILENAME)?;
-    let duration = end.elapsed();
+    let duration = start.elapsed();
     println!("set_word_list took: {:.2?}", duration);
+    println!("Starting HTTP Server");
     HttpServer::new(|| {
         App::new()
             .wrap(Logger::default())
