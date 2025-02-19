@@ -1,7 +1,6 @@
 mod filters;
 mod models;
 
-use actix_cors::Cors;
 use actix_web::middleware::Logger;
 use std::io::BufRead;
 use std::sync::OnceLock;
@@ -53,7 +52,6 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(|| {
         App::new()
             .wrap(Logger::default())
-            .wrap(Cors::permissive())
             .service(all_words)
             .service(possible_words)
     })
