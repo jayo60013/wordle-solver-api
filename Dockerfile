@@ -1,12 +1,22 @@
-FROM rust:1.84.1 as builder
-WORKDIR /usr/local/src
-COPY . .
-RUN cargo build --release
-RUN rm -rf target/release/*.*
-RUN find target/release -mindepth 1 -maxdepth 1 -type d -print0 | xargs -0 rm -rf 
-RUN mv target/release/* ./app
+# Use Rust official image as the base for building
+FROM rust:1.76-alpine AS builder
+WORKDIR /app
+RUN apk add --no-cache pkgconfig libssl3-dev
 
-FROM debian:buster-slim
-COPY --from=builder /usr/local/src/app /usr/local/bin/app
-WORKDIR /usr/local/bin
-CMD [ "./app" ]
+# Copy the Cargo files first to cache dependencies
+COPY Cargo.toml Cargo.lock ./
+
+# Create a dummy file to leverage caching for dependencies
+RUN mkdir src && echo "fn main() {}" > src/main.rs
+RUN cargo build --release
+COPY src ./src
+RUN cargo build --release
+
+FROM debian:bullseye-slim
+WORKDIR /app
+RUN apt-get update && apt-get install -y ca-certificates libssl-dev && rm -rf /var/lib/apt/lists/*
+
+# Copy the compiled binary from the builder stage
+COPY --from=builder /app/target/release/wordle-solver-api /app/wordle-solver-api
+EXPOSE 5307
+CMD ["/app/wordle-solver-api"]
