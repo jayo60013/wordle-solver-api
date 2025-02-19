@@ -36,6 +36,7 @@ WORKDIR /usr/src/wordle_solver_api
 
 # Copy the binary from the builder stage
 COPY --from=builder /usr/src/wordle_solver_api/target/release/wordle_solver .
+COPY word_list.txt /usr/src/wordle_solver_api/word_list.txt
 
 # Expose the port the app runs on
 EXPOSE 5307
