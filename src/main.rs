@@ -1,13 +1,14 @@
 mod filters;
 mod models;
 
+use actix_cors::Cors;
 use actix_web::middleware::Logger;
 use std::io::BufRead;
 use std::sync::OnceLock;
 use std::time::SystemTime;
 use std::{fs::File, io};
 
-use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{get, http, post, web, App, HttpResponse, HttpServer, Responder};
 use log::info;
 use std::env;
 
@@ -50,8 +51,15 @@ async fn main() -> std::io::Result<()> {
 
     info!("Starting HTTP Server on 5307");
     HttpServer::new(|| {
+        let cors = Cors::default()
+            .allowed_origin("http://localhost:5173")
+            .allowed_methods(vec!["GET", "POST"])
+            .allowed_headers(vec![http::header::CONTENT_TYPE])
+            .max_age(3600);
+
         App::new()
             .wrap(Logger::default())
+            .wrap(cors)
             .service(all_words)
             .service(possible_words)
     })
@@ -88,7 +96,7 @@ fn set_word_list(filename: &str) -> io::Result<()> {
         .collect();
     word_structs.sort_by(|a, b| a.entropy.partial_cmp(&b.entropy).unwrap());
     let duration = start.elapsed();
-    info!("Finished calculating word entropy, took {:?}", duration);
+    info!("Finished calculating word entropy, took {:.2?}", duration);
 
     WORD_LIST
         .set(word_structs)
