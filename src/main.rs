@@ -8,6 +8,7 @@ use std::time::SystemTime;
 use std::{fs::File, io};
 
 use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
+use log::info;
 use std::env;
 
 use crate::filters::{filter_by_letter_contraints, filter_words_by_letter_contraints};
@@ -42,15 +43,12 @@ async fn possible_words(letter_constraints: web::Json<LetterConstraints>) -> imp
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    env::set_var("RUST_LOG", "actix_web=info");
+    env::set_var("RUST_LOG", "actix_web=info,wordle_solver=info");
     env_logger::init();
 
-    println!("starting set_word_list");
-    let start = SystemTime::now();
     set_word_list(FILENAME)?;
-    let duration = start.elapsed();
-    println!("set_word_list took: {:.2?}", duration);
-    println!("Starting HTTP Server");
+
+    info!("Starting HTTP Server on 5307");
     HttpServer::new(|| {
         App::new()
             .wrap(Logger::default())
@@ -63,9 +61,13 @@ async fn main() -> std::io::Result<()> {
 }
 
 fn set_word_list(filename: &str) -> io::Result<()> {
+    info!("Starting read all words from {}", filename);
     let words = read_words(filename)?;
     let total = words.len() as f32;
+    info!("Read {} words", total);
 
+    info!("Starting calculating word entropy");
+    let start = SystemTime::now();
     let mut word_structs: Vec<Word> = words
         .iter()
         .map(|word| {
@@ -84,8 +86,9 @@ fn set_word_list(filename: &str) -> io::Result<()> {
             }
         })
         .collect();
-
     word_structs.sort_by(|a, b| a.entropy.partial_cmp(&b.entropy).unwrap());
+    let duration = start.elapsed();
+    info!("Finished calculating word entropy, took {:?}", duration);
 
     WORD_LIST
         .set(word_structs)
