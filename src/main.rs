@@ -15,7 +15,7 @@ use std::env;
 use crate::filters::{filter_by_letter_contraints, filter_words_by_letter_contraints};
 use crate::models::{LetterConstraints, PossibleWords, Word};
 
-const FILENAME: &str = "word_list.txt";
+const FILENAME: &str = "wordle-nyt-allowed-guesses.txt";
 static WORD_LIST: OnceLock<Vec<Word>> = OnceLock::new();
 
 #[get("/all-words")]
