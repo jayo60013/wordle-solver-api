@@ -11,13 +11,14 @@ pub struct PossibleWords {
 pub struct Word {
     pub word: String,
     pub entropy: f32,
+    pub is_answer: bool,
 }
 
 #[derive(Deserialize, PartialEq, Eq, Clone, Copy, PartialOrd, Ord)]
 pub enum Color {
-    GREY,
-    YELLOW,
-    GREEN,
+    Grey,
+    Yellow,
+    Green,
 }
 
 #[derive(Deserialize, Clone)]

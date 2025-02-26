@@ -12,16 +12,13 @@ Wordle word list obtained [here](https://gist.github.com/cfreshman/a7b776506c732
 ### Example Payload
 ```json
 {
-  "grey_letters": ["b", "l", "e", "u", "t", "o", "r", "i"],
-  "yellow_letters": [
-    ["d", 4],
-    ["o", 0],
-    ["d", 3],
-    ["a", 1],
-    ["d", 2],
-    ["o", 4]
-  ],
-  "green_letters": []
+    [
+        {"turn": 0, "letter": "b", "position": 0, "color": "GREY"},
+        {"turn": 0, "letter": "l", "position": 1, "color": "GREY"},
+        {"turn": 0, "letter": "o", "position": 2, "color": "YELLOW"},
+        {"turn": 0, "letter": "o", "position": 3, "color": "GREEN"},
+        {"turn": 0, "letter": "d", "position": 4, "color": "GREY"}
+    ]
 }
 ```
 
