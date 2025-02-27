@@ -19,9 +19,17 @@ fn filter_word_by_guesses(word: &Word, guesses: &[Guess]) -> bool {
                 })
                 .cloned()
                 .count();
+            let number_of_yellows = guesses
+                .iter()
+                .filter(|g| {
+                    g.turn == guess.turn && g.letter == guess.letter && g.color == Color::Yellow
+                })
+                .cloned()
+                .count();
+            let expected_total = number_of_greens + number_of_yellows;
             let actual_total = word.word.chars().filter(|&c| c == guess.letter).count();
 
-            if actual_total <= number_of_greens {
+            if actual_total < expected_total {
                 return false;
             }
 
@@ -126,6 +134,48 @@ mod tests {
                 is_answer: true,
             },
         ];
+
+        // When
+        let actual_words = filter_words_by_guesses(&input_words, &guesses);
+
+        // Then
+        assert_eq!(actual_words, expected_words);
+    }
+
+    #[test]
+    fn test_double_yellow_letter_gives_word_with_double_and_more() {
+        // Given
+        let guesses = [
+            Guess {
+                turn: 0,
+                letter: 'e',
+                position: 0,
+                color: Color::Yellow,
+            },
+            Guess {
+                turn: 0,
+                letter: 'e',
+                position: 4,
+                color: Color::Yellow,
+            },
+        ];
+        let input_words = vec![
+            Word {
+                word: "tenet".to_string(),
+                entropy: 0.0,
+                is_answer: true,
+            },
+            Word {
+                word: "tests".to_string(),
+                entropy: 0.0,
+                is_answer: true,
+            },
+        ];
+        let expected_words = vec![Word {
+            word: "tenet".to_string(),
+            entropy: 0.0,
+            is_answer: true,
+        }];
 
         // When
         let actual_words = filter_words_by_guesses(&input_words, &guesses);
