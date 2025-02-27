@@ -1,12 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Deserialize)]
-pub struct LetterConstraints {
-    pub grey_letters: Vec<char>,
-    pub yellow_letters: Vec<(char, usize)>,
-    pub green_letters: Vec<(char, usize)>,
-}
-
 #[derive(Serialize)]
 pub struct PossibleWords {
     pub word_list: Vec<Word>,
@@ -18,4 +11,20 @@ pub struct PossibleWords {
 pub struct Word {
     pub word: String,
     pub entropy: f32,
+    pub is_answer: bool,
+}
+
+#[derive(Deserialize, PartialEq, Eq, Clone, Copy, PartialOrd, Ord, Debug)]
+pub enum Color {
+    Grey,
+    Yellow,
+    Green,
+}
+
+#[derive(Deserialize, Clone)]
+pub struct Guess {
+    pub turn: usize,
+    pub letter: char,
+    pub position: usize,
+    pub color: Color,
 }

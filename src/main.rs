@@ -1,45 +1,66 @@
+mod entropy;
 mod filters;
 mod models;
 
 use actix_cors::Cors;
-use actix_web::middleware::Logger;
-use std::io::BufRead;
-use std::sync::OnceLock;
-use std::time::SystemTime;
-use std::{fs::File, io};
+use actix_web::{get, middleware::Logger};
+use entropy::calculate_entropy_for_words;
+use filters::filter_words_by_guesses;
+use models::Guess;
+use std::{
+    fs::File,
+    io::{self, BufRead, BufReader},
+    sync::OnceLock,
+};
 
-use actix_web::{get, http, post, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{http, post, web, App, HttpResponse, HttpServer, Responder};
 use log::info;
 use std::env;
 
-use crate::filters::{filter_by_letter_contraints, filter_words_by_letter_contraints};
-use crate::models::{LetterConstraints, PossibleWords, Word};
+use crate::models::{PossibleWords, Word};
 
-const FILENAME: &str = "wordle-nyt-answers.txt";
+const ALLOWED_GUESSES_FILENAME: &str = "wordle-nyt-allowed-guesses.txt";
+const ANSWERS_FILENAME: &str = "wordle-nyt-answers.txt";
 static WORD_LIST: OnceLock<Vec<Word>> = OnceLock::new();
 
 #[get("/all-words")]
 async fn all_words() -> impl Responder {
-    let word_list = WORD_LIST.get().expect("Global word list not set");
-    HttpResponse::Ok().json(PossibleWords {
-        word_list: word_list.clone(),
-        number_of_words: word_list.len(),
-        total_number_of_words: word_list.len(),
-    })
+    match WORD_LIST.get() {
+        Some(words) => {
+            let response = PossibleWords {
+                word_list: words.clone(),
+                number_of_words: words.len(),
+                total_number_of_words: words.len(),
+            };
+
+            HttpResponse::Ok().json(response)
+        }
+        None => HttpResponse::InternalServerError()
+            .content_type("application/json")
+            .body(r#"{"error":"Word list not initialised"}"#),
+    }
 }
 
 #[post("/possible-words")]
-async fn possible_words(letter_constraints: web::Json<LetterConstraints>) -> impl Responder {
-    let word_list = WORD_LIST.get().expect("Global word list not set");
+async fn possible_words(guesses: web::Json<Vec<Guess>>) -> impl Responder {
+    match WORD_LIST.get() {
+        Some(words) => {
+            let filtered_words = filter_words_by_guesses(words, &guesses.0);
+            let filtered_words_with_entropy = calculate_entropy_for_words(filtered_words);
+            let number_of_words = filtered_words_with_entropy.len();
+            let total_number_of_words = words.len();
 
-    let possible_word_list: Vec<Word> =
-        filter_words_by_letter_contraints(word_list, letter_constraints.0);
-    let number_of_words = possible_word_list.len();
-    HttpResponse::Ok().json(PossibleWords {
-        word_list: possible_word_list,
-        number_of_words,
-        total_number_of_words: word_list.len(),
-    })
+            let response = PossibleWords {
+                word_list: filtered_words_with_entropy,
+                number_of_words,
+                total_number_of_words,
+            };
+            HttpResponse::Ok().json(response)
+        }
+        None => HttpResponse::InternalServerError()
+            .content_type("application/json")
+            .body(r#"{"error":"Word list not initialised"}"#),
+    }
 }
 
 #[actix_web::main]
@@ -47,7 +68,13 @@ async fn main() -> std::io::Result<()> {
     env::set_var("RUST_LOG", "actix_web=info,wordle_solver=info");
     env_logger::init();
 
-    set_word_list(FILENAME)?;
+    let words = get_all_words_from_file().unwrap();
+    if WORD_LIST.set(words).is_err() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "Failed to initialise WORD_LIST",
+        ));
+    };
 
     info!("Starting HTTP Server on 5307");
     HttpServer::new(|| {
@@ -68,46 +95,26 @@ async fn main() -> std::io::Result<()> {
     .await
 }
 
-fn set_word_list(filename: &str) -> io::Result<()> {
-    info!("Starting read all words from {}", filename);
-    let words = read_words(filename)?;
-    let total = words.len() as f32;
-    info!("Read {} words", total);
+fn get_all_words_from_file() -> io::Result<Vec<Word>> {
+    fn read_words_from_file(filename: &str, is_answer: bool) -> io::Result<Vec<Word>> {
+        let file = File::open(filename)?;
+        let r = BufReader::new(file);
+        let words: Vec<Word> = r
+            .lines()
+            .filter_map(|line_result| {
+                line_result.ok().map(|word| Word {
+                    word,
+                    entropy: 0.0,
+                    is_answer,
+                })
+            })
+            .collect();
+        Ok(words)
+    }
 
-    info!("Starting calculating word entropy");
-    let start = SystemTime::now();
-    let mut word_structs: Vec<Word> = words
-        .iter()
-        .map(|word| {
-            let grey_letters: Vec<char> = word.chars().collect();
-            let letter_constraints = LetterConstraints {
-                grey_letters,
-                yellow_letters: vec![],
-                green_letters: vec![],
-            };
-            let filtered_words = filter_by_letter_contraints(&words, letter_constraints);
-            let amount_of_filtered_words = filtered_words.len();
+    let mut words = read_words_from_file(ANSWERS_FILENAME, true)?;
+    let allowed_guesses = read_words_from_file(ALLOWED_GUESSES_FILENAME, false)?;
 
-            Word {
-                word: word.clone(),
-                entropy: amount_of_filtered_words as f32 / total,
-            }
-        })
-        .collect();
-    word_structs.sort_by(|a, b| a.entropy.partial_cmp(&b.entropy).unwrap());
-    let duration = start.elapsed();
-    info!("Finished calculating word entropy, took {:.2?}", duration);
-
-    WORD_LIST
-        .set(word_structs)
-        .map_err(|_| io::Error::new(io::ErrorKind::Other, "Global word list is already set"))
-}
-
-fn read_words(filename: &str) -> io::Result<Vec<String>> {
-    let f = File::open(filename)?;
-    let reader = io::BufReader::new(f);
-
-    let lines = reader.lines().collect::<Result<Vec<String>, io::Error>>()?;
-
-    Ok(lines)
+    words.extend(allowed_guesses);
+    Ok(words)
 }
