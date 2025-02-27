@@ -9,48 +9,31 @@ pub fn filter_words_by_guesses(words: &[Word], guesses: &[Guess]) -> Vec<Word> {
 }
 
 fn filter_word_by_guesses(word: &Word, guesses: &[Guess]) -> bool {
-    guesses.iter().all(|guess| match guess.color {
-        Color::Green => word.word.chars().nth(guess.position).unwrap() == guess.letter,
-        Color::Yellow => {
-            let number_of_greens = guesses
-                .iter()
-                .filter(|g| {
-                    g.turn == guess.turn && g.letter == guess.letter && g.color == Color::Green
-                })
-                .cloned()
-                .count();
-            let actual_total = word.word.chars().filter(|&c| c == guess.letter).count();
+    let word_chars: Vec<char> = word.word.chars().collect();
 
-            if actual_total <= number_of_greens {
-                return false;
+    guesses.iter().all(|guess| {
+        let expected_total = get_expected_total_of_letters(guesses, guess);
+        let actual_total = word_chars.iter().filter(|&&c| c == guess.letter).count();
+
+        match guess.color {
+            Color::Green => word_chars[guess.position] == guess.letter,
+            Color::Yellow => {
+                actual_total >= expected_total && word_chars[guess.position] != guess.letter
             }
-
-            word.word.chars().nth(guess.position).unwrap() != guess.letter
-        }
-        Color::Grey => {
-            let same_turn: Vec<Guess> = guesses
-                .iter()
-                .filter(|g| g.turn == guess.turn && g.letter == guess.letter)
-                .cloned()
-                .collect();
-
-            let greens: Vec<Guess> = same_turn
-                .iter()
-                .filter(|g| g.color == Color::Green)
-                .cloned()
-                .collect();
-            let yellows: Vec<Guess> = same_turn
-                .iter()
-                .filter(|g| g.color == Color::Yellow)
-                .cloned()
-                .collect();
-
-            // This is the total number of expected letters in the word
-            let expected_total = greens.len() + yellows.len();
-            let actual_total = word.word.chars().filter(|&c| c == guess.letter).count();
-            expected_total == actual_total
+            Color::Grey => expected_total == actual_total,
         }
     })
+}
+
+fn get_expected_total_of_letters(guesses: &[Guess], guess: &Guess) -> usize {
+    guesses
+        .iter()
+        .filter(|g| g.turn == guess.turn && g.letter == guess.letter)
+        .fold(0, |acc, g| match g.color {
+            Color::Green => acc + 1,
+            Color::Yellow => acc + 1,
+            _ => acc,
+        })
 }
 
 #[cfg(test)]
@@ -126,6 +109,48 @@ mod tests {
                 is_answer: true,
             },
         ];
+
+        // When
+        let actual_words = filter_words_by_guesses(&input_words, &guesses);
+
+        // Then
+        assert_eq!(actual_words, expected_words);
+    }
+
+    #[test]
+    fn test_double_yellow_letter_gives_word_with_double_and_more() {
+        // Given
+        let guesses = [
+            Guess {
+                turn: 0,
+                letter: 'e',
+                position: 0,
+                color: Color::Yellow,
+            },
+            Guess {
+                turn: 0,
+                letter: 'e',
+                position: 4,
+                color: Color::Yellow,
+            },
+        ];
+        let input_words = vec![
+            Word {
+                word: "tenet".to_string(),
+                entropy: 0.0,
+                is_answer: true,
+            },
+            Word {
+                word: "tests".to_string(),
+                entropy: 0.0,
+                is_answer: true,
+            },
+        ];
+        let expected_words = vec![Word {
+            word: "tenet".to_string(),
+            entropy: 0.0,
+            is_answer: true,
+        }];
 
         // When
         let actual_words = filter_words_by_guesses(&input_words, &guesses);
