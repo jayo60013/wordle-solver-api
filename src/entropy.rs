@@ -25,7 +25,7 @@ pub fn calculate_entropy_for_words(words: Vec<Word>) -> Vec<Word> {
         .collect()
 }
 
-fn calculate_entropy_for_word(word: &Word, words: &Vec<Word>) -> f32 {
+fn calculate_entropy_for_word(word: &Word, words: &[Word]) -> f32 {
     let colors = [Color::Grey, Color::Yellow, Color::Green];
     repeat(colors)
         .take(5)
@@ -39,7 +39,7 @@ fn calculate_entropy_for_word(word: &Word, words: &Vec<Word>) -> f32 {
                     turn: 0,
                     letter: word.word.chars().nth(position).unwrap(),
                     position,
-                    color: color.clone(),
+                    color: *color,
                 })
                 .collect();
             calculate_entropy_from_one_guess(words, guess)
@@ -47,7 +47,7 @@ fn calculate_entropy_for_word(word: &Word, words: &Vec<Word>) -> f32 {
         .sum()
 }
 
-fn calculate_entropy_from_one_guess(words: &Vec<Word>, guess: Vec<Guess>) -> f32 {
+fn calculate_entropy_from_one_guess(words: &[Word], guess: Vec<Guess>) -> f32 {
     let total_number_of_words = words.len();
     if total_number_of_words == 0 {
         return 0.0;
