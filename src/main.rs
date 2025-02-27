@@ -1,8 +1,10 @@
+mod entropy;
 mod filters;
 mod models;
 
 use actix_cors::Cors;
 use actix_web::{get, middleware::Logger};
+use entropy::calculate_entropy_for_words;
 use filters::filter_words_by_guesses;
 use models::Guess;
 use std::{
@@ -44,11 +46,12 @@ async fn possible_words(guesses: web::Json<Vec<Guess>>) -> impl Responder {
     match WORD_LIST.get() {
         Some(words) => {
             let filtered_words = filter_words_by_guesses(words, &guesses.0);
-            let number_of_words = filtered_words.len();
+            let filtered_words_with_entropy = calculate_entropy_for_words(filtered_words);
+            let number_of_words = filtered_words_with_entropy.len();
             let total_number_of_words = words.len();
 
             let response = PossibleWords {
-                word_list: filtered_words,
+                word_list: filtered_words_with_entropy,
                 number_of_words,
                 total_number_of_words,
             };

@@ -14,7 +14,7 @@ pub struct Word {
     pub is_answer: bool,
 }
 
-#[derive(Deserialize, PartialEq, Eq, Clone, Copy, PartialOrd, Ord)]
+#[derive(Deserialize, PartialEq, Eq, Clone, Copy, PartialOrd, Ord, Debug)]
 pub enum Color {
     Grey,
     Yellow,
