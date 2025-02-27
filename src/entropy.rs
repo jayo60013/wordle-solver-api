@@ -9,15 +9,10 @@ use std::iter::repeat;
 pub fn calculate_entropy_for_words(words: Vec<Word>) -> Vec<Word> {
     words
         .par_iter()
-        .enumerate()
-        .map(|(i, word)| {
-            let entropy = calculate_entropy_for_word(word, &words);
-            println!("({}/{}) {}: {}", i, words.len(), word.word, entropy);
-            Word {
-                word: word.word.clone(),
-                entropy,
-                is_answer: word.is_answer,
-            }
+        .map(|word| Word {
+            word: word.word.clone(),
+            entropy: calculate_entropy_for_word(word, &words),
+            is_answer: word.is_answer,
         })
         .collect::<Vec<Word>>()
         .into_iter()
