@@ -20,7 +20,9 @@ fn filter_word_by_guesses(word: &Word, guesses: &[Guess]) -> bool {
             Color::Yellow => {
                 actual_total >= expected_total && word_chars[guess.position] != guess.letter
             }
-            Color::Grey => expected_total == actual_total,
+            Color::Grey => {
+                expected_total == actual_total && word_chars[guess.position] != guess.letter
+            }
         }
     })
 }
@@ -30,8 +32,7 @@ fn get_expected_total_of_letters(guesses: &[Guess], guess: &Guess) -> usize {
         .iter()
         .filter(|g| g.turn == guess.turn && g.letter == guess.letter)
         .fold(0, |acc, g| match g.color {
-            Color::Green => acc + 1,
-            Color::Yellow => acc + 1,
+            Color::Green | Color::Yellow => acc + 1,
             _ => acc,
         })
 }
@@ -148,6 +149,66 @@ mod tests {
         ];
         let expected_words = vec![Word {
             word: "tenet".to_string(),
+            entropy: 0.0,
+            is_answer: true,
+        }];
+
+        // When
+        let actual_words = filter_words_by_guesses(&input_words, &guesses);
+
+        // Then
+        assert_eq!(actual_words, expected_words);
+    }
+
+    #[test]
+    fn test_grey_letter_cant_appear_in_place_its_appeared_before() {
+        // Given
+        let guesses = [
+            Guess {
+                turn: 0,
+                letter: 'e',
+                position: 0,
+                color: Color::Yellow,
+            },
+            Guess {
+                turn: 0,
+                letter: 'e',
+                position: 1,
+                color: Color::Grey,
+            },
+            Guess {
+                turn: 0,
+                letter: 'r',
+                position: 2,
+                color: Color::Grey,
+            },
+            Guess {
+                turn: 0,
+                letter: 'i',
+                position: 3,
+                color: Color::Grey,
+            },
+            Guess {
+                turn: 0,
+                letter: 'e',
+                position: 4,
+                color: Color::Grey,
+            },
+        ];
+        let input_words = vec![
+            Word {
+                word: "taste".to_string(),
+                entropy: 0.0,
+                is_answer: true,
+            },
+            Word {
+                word: "asset".to_string(),
+                entropy: 0.0,
+                is_answer: true,
+            },
+        ];
+        let expected_words = vec![Word {
+            word: "asset".to_string(),
             entropy: 0.0,
             is_answer: true,
         }];

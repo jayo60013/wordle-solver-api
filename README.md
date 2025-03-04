@@ -10,6 +10,7 @@ Wordle word list obtained [here](https://gist.github.com/cfreshman/a7b776506c732
 - `POST /possible-words` - returns all possible words based on the constraints given by grey, yellow and green letters.
 
 ### Example Payload
+
 ```json
 {
     [
@@ -23,6 +24,7 @@ Wordle word list obtained [here](https://gist.github.com/cfreshman/a7b776506c732
 ```
 
 ### Example Response
+
 ```json
 {
   "word_list": [
@@ -37,7 +39,8 @@ Wordle word list obtained [here](https://gist.github.com/cfreshman/a7b776506c732
 ```
 
 ## Road Map
+
 - [x] Get possible words based off letter constraints
-- [ ] Distinguish between a possible guess and a possible answer
+- [x] Distinguish between a possible guess and a possible answer
 - [ ] Get best next guess
 - [ ] Analyse the way the game was played

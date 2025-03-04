@@ -30,7 +30,6 @@ fn calculate_entropy_for_word(word: &Word, words: &[Word]) -> f32 {
                 .par_iter()
                 .enumerate()
                 .map(|(position, color)| Guess {
-                    //TODO: create new struct and remove turn
                     turn: 0,
                     letter: word.word.chars().nth(position).unwrap(),
                     position,
