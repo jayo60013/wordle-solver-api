@@ -4,7 +4,7 @@ use crate::{
 };
 use itertools::Itertools;
 use rayon::prelude::*;
-use std::iter::repeat;
+use std::{collections::HashMap, iter::repeat};
 
 pub fn calculate_entropy_for_words(words: Vec<Word>) -> Vec<Word> {
     words
@@ -22,7 +22,18 @@ pub fn calculate_entropy_for_words(words: Vec<Word>) -> Vec<Word> {
 
 fn calculate_entropy_for_word(word: &Word, words: &[Word]) -> f32 {
     let colors = [Color::Grey, Color::Yellow, Color::Green];
-    repeat(colors)
+    let repeat_penalty: f32 = word
+        .word
+        .chars()
+        .fold(HashMap::new(), |mut acc, c| {
+            *acc.entry(c).or_insert(0) += 1;
+            acc
+        })
+        .values()
+        .map(|&count| count as f32 - 1.0)
+        .sum::<f32>();
+
+    let entropy: f32 = repeat(colors)
         .take(5)
         .multi_cartesian_product()
         .map(|perm| {
@@ -38,7 +49,9 @@ fn calculate_entropy_for_word(word: &Word, words: &[Word]) -> f32 {
                 .collect();
             calculate_entropy_from_one_guess(words, guess)
         })
-        .sum()
+        .sum();
+
+    entropy * (1.0 - (repeat_penalty) * 0.5)
 }
 
 fn calculate_entropy_from_one_guess(words: &[Word], guess: Vec<Guess>) -> f32 {

@@ -30,11 +30,14 @@ Wordle word list obtained [here](https://gist.github.com/cfreshman/a7b776506c732
   "word_list": [
     {
       "word": "dogma",
-      "entropy": 0.23473366
+      "entropy": 0.23473366,
+      "is_answer": true
     }
   ],
   "number_of_words": 1,
-  "total_number_of_words": 2309
+  "total_number_of_words": 2309,
+  "lowest_entropy": 0.84,
+  "highest_entropy": 3.4819899,
 }
 ```
 

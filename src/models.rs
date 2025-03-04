@@ -5,6 +5,8 @@ pub struct PossibleWords {
     pub word_list: Vec<Word>,
     pub number_of_words: usize,
     pub total_number_of_words: usize,
+    pub lowest_entropy: f32,
+    pub highest_entropy: f32,
 }
 
 #[derive(Debug, PartialEq, PartialOrd, Clone, Serialize)]

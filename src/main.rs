@@ -31,6 +31,8 @@ async fn all_words() -> impl Responder {
                 word_list: words.clone(),
                 number_of_words: words.len(),
                 total_number_of_words: words.len(),
+                lowest_entropy: 0.0,
+                highest_entropy: 0.0,
             };
 
             HttpResponse::Ok().json(response)
@@ -49,11 +51,23 @@ async fn possible_words(guesses: web::Json<Vec<Guess>>) -> impl Responder {
             let filtered_words_with_entropy = calculate_entropy_for_words(filtered_words);
             let number_of_words = filtered_words_with_entropy.len();
             let total_number_of_words = words.len();
+            let lowest_entropy: f32 = filtered_words_with_entropy
+                .iter()
+                .min_by(|a, b| a.entropy.partial_cmp(&b.entropy).unwrap())
+                .map(|w| w.entropy)
+                .unwrap();
+            let highest_entropy: f32 = filtered_words_with_entropy
+                .iter()
+                .max_by(|a, b| a.entropy.partial_cmp(&b.entropy).unwrap())
+                .map(|w| w.entropy)
+                .unwrap();
 
             let response = PossibleWords {
                 word_list: filtered_words_with_entropy,
                 number_of_words,
                 total_number_of_words,
+                lowest_entropy,
+                highest_entropy,
             };
             HttpResponse::Ok().json(response)
         }
