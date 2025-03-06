@@ -1,27 +1,34 @@
+use std::collections::HashMap;
+
 use crate::models::{Color, Guess, Word};
+use rayon::prelude::*;
 
 pub fn filter_words_by_guesses(words: &[Word], guesses: &[Guess]) -> Vec<Word> {
     words
-        .iter()
+        .par_iter()
         .filter(|word| filter_word_by_guesses(word, guesses))
         .cloned()
         .collect()
 }
 
 fn filter_word_by_guesses(word: &Word, guesses: &[Guess]) -> bool {
-    let word_chars: Vec<char> = word.word.chars().collect();
+    let word_chars = word.word.as_bytes();
+    let char_counts = word_chars.iter().fold(HashMap::new(), |mut acc, &c| {
+        *acc.entry(c).or_insert(0) += 1;
+        acc
+    });
 
     guesses.iter().all(|guess| {
         let expected_total = get_expected_total_of_letters(guesses, guess);
-        let actual_total = word_chars.iter().filter(|&&c| c == guess.letter).count();
+        let actual_total = *char_counts.get(&(guess.letter as u8)).unwrap_or(&0);
 
         match guess.color {
-            Color::Green => word_chars[guess.position] == guess.letter,
+            Color::Green => word_chars[guess.position] == guess.letter as u8,
             Color::Yellow => {
-                actual_total >= expected_total && word_chars[guess.position] != guess.letter
+                actual_total >= expected_total && word_chars[guess.position] != guess.letter as u8
             }
             Color::Grey => {
-                expected_total == actual_total && word_chars[guess.position] != guess.letter
+                expected_total == actual_total && word_chars[guess.position] != guess.letter as u8
             }
         }
     })
