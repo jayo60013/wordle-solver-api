@@ -3,13 +3,14 @@ mod filters;
 mod models;
 
 use actix_cors::Cors;
-use actix_web::{get, middleware::Logger};
+use actix_web::middleware::{Compress, Logger};
 use entropy::calculate_entropy_for_words;
 use filters::filter_words_by_guesses;
 use models::Guess;
+use serde_json::to_writer;
 use std::{
     fs::File,
-    io::{self, BufRead, BufReader},
+    io::{self, BufRead, BufReader, Cursor},
     sync::OnceLock,
 };
 
@@ -22,26 +23,6 @@ use crate::models::{PossibleWords, Word};
 const ALLOWED_GUESSES_FILENAME: &str = "wordle-nyt-allowed-guesses.txt";
 const ANSWERS_FILENAME: &str = "wordle-nyt-answers.txt";
 static WORD_LIST: OnceLock<Vec<Word>> = OnceLock::new();
-
-#[get("/all-words")]
-async fn all_words() -> impl Responder {
-    match WORD_LIST.get() {
-        Some(words) => {
-            let response = PossibleWords {
-                word_list: words.clone(),
-                number_of_words: words.len(),
-                total_number_of_words: words.len(),
-                lowest_entropy: 0.0,
-                highest_entropy: 0.0,
-            };
-
-            HttpResponse::Ok().json(response)
-        }
-        None => HttpResponse::InternalServerError()
-            .content_type("application/json")
-            .body(r#"{"error":"Word list not initialised"}"#),
-    }
-}
 
 #[post("/possible-words")]
 async fn possible_words(guesses: web::Json<Vec<Guess>>) -> impl Responder {
@@ -69,7 +50,15 @@ async fn possible_words(guesses: web::Json<Vec<Guess>>) -> impl Responder {
                 lowest_entropy,
                 highest_entropy,
             };
-            HttpResponse::Ok().json(response)
+
+            let mut cursor = Cursor::new(Vec::new());
+            if to_writer(&mut cursor, &response).is_ok() {
+                HttpResponse::Ok()
+                    .content_type("application/json")
+                    .body(cursor.into_inner())
+            } else {
+                HttpResponse::InternalServerError().finish()
+            }
         }
         None => HttpResponse::InternalServerError()
             .content_type("application/json")
@@ -101,7 +90,7 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .wrap(Logger::default())
             .wrap(cors)
-            .service(all_words)
+            .wrap(Compress::default())
             .service(possible_words)
     })
     .bind(("0.0.0.0", 5307))?
