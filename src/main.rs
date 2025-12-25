@@ -26,6 +26,7 @@ static WORD_LIST: OnceLock<Vec<Word>> = OnceLock::new();
 
 #[post("/possible-words")]
 async fn possible_words(guesses: web::Json<Vec<Guess>>) -> impl Responder {
+    info!("Received request");
     match WORD_LIST.get() {
         Some(words) => {
             let filtered_words = filter_words_by_guesses(words, &guesses.0);
@@ -83,7 +84,7 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(|| {
         let cors = Cors::default()
             .allowed_origin("http://localhost:5173")
-            .allowed_methods(vec!["GET", "POST"])
+            .allowed_methods(vec!["GET", "POST", "OPTIONS"])
             .allowed_headers(vec![http::header::CONTENT_TYPE])
             .max_age(3600);
 
