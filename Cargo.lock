@@ -1789,6 +1789,7 @@ dependencies = [
  "env_logger",
  "itertools",
  "log",
+ "parking_lot",
  "rayon",
  "serde",
  "serde_json",

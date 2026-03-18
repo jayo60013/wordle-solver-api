@@ -5,22 +5,18 @@ Wordle word list obtained [here](https://gist.github.com/cfreshman/a7b776506c732
 
 ## Endpoints
 
-- `GET /all-words` - returns all the words in the official NYT wordle answers list.
-
 - `POST /possible-words` - returns all possible words based on the constraints given by grey, yellow and green letters.
 
 ### Example Payload
 
 ```json
-{
-    [
-        {"turn": 0, "letter": "b", "position": 0, "color": "GREY"},
-        {"turn": 0, "letter": "l", "position": 1, "color": "GREY"},
-        {"turn": 0, "letter": "o", "position": 2, "color": "YELLOW"},
-        {"turn": 0, "letter": "o", "position": 3, "color": "GREEN"},
-        {"turn": 0, "letter": "d", "position": 4, "color": "GREY"}
-    ]
-}
+[
+    {"turn": 0, "letter": "b", "position": 0, "color": "GREY"},
+    {"turn": 0, "letter": "l", "position": 1, "color": "GREY"},
+    {"turn": 0, "letter": "o", "position": 2, "color": "YELLOW"},
+    {"turn": 0, "letter": "o", "position": 3, "color": "GREEN"},
+    {"turn": 0, "letter": "d", "position": 4, "color": "GREY"}
+]
 ```
 
 ### Example Response

@@ -40,7 +40,7 @@ fn get_expected_total_of_letters(guesses: &[Guess], guess: &Guess) -> usize {
         .filter(|g| g.turn == guess.turn && g.letter == guess.letter)
         .fold(0, |acc, g| match g.color {
             Color::Green | Color::Yellow => acc + 1,
-            _ => acc,
+            Color::Grey => acc,
         })
 }
 
@@ -84,38 +84,14 @@ mod tests {
             },
         ];
         let input_words = vec![
-            Word {
-                word: "aloof".to_string(),
-                entropy: 0.0,
-                is_answer: true,
-            },
-            Word {
-                word: "xenon".to_string(),
-                entropy: 0.0,
-                is_answer: true,
-            },
-            Word {
-                word: "achoo".to_string(),
-                entropy: 0.0,
-                is_answer: true,
-            },
-            Word {
-                word: "cocoa".to_string(),
-                entropy: 0.0,
-                is_answer: true,
-            },
+            Word::new("aloof".to_string(), true),
+            Word::new("xenon".to_string(), true),
+            Word::new("achoo".to_string(), true),
+            Word::new("cocoa".to_string(), true),
         ];
         let expected_words = vec![
-            Word {
-                word: "achoo".to_string(),
-                entropy: 0.0,
-                is_answer: true,
-            },
-            Word {
-                word: "cocoa".to_string(),
-                entropy: 0.0,
-                is_answer: true,
-            },
+            Word::new("achoo".to_string(), true),
+            Word::new("cocoa".to_string(), true),
         ];
 
         // When
@@ -143,22 +119,10 @@ mod tests {
             },
         ];
         let input_words = vec![
-            Word {
-                word: "tenet".to_string(),
-                entropy: 0.0,
-                is_answer: true,
-            },
-            Word {
-                word: "tests".to_string(),
-                entropy: 0.0,
-                is_answer: true,
-            },
+            Word::new("tenet".to_string(), true),
+            Word::new("tests".to_string(), true),
         ];
-        let expected_words = vec![Word {
-            word: "tenet".to_string(),
-            entropy: 0.0,
-            is_answer: true,
-        }];
+        let expected_words = vec![Word::new("tenet".to_string(), true)];
 
         // When
         let actual_words = filter_words_by_guesses(&input_words, &guesses);
@@ -203,22 +167,10 @@ mod tests {
             },
         ];
         let input_words = vec![
-            Word {
-                word: "taste".to_string(),
-                entropy: 0.0,
-                is_answer: true,
-            },
-            Word {
-                word: "asset".to_string(),
-                entropy: 0.0,
-                is_answer: true,
-            },
+            Word::new("taste".to_string(), true),
+            Word::new("asset".to_string(), true),
         ];
-        let expected_words = vec![Word {
-            word: "asset".to_string(),
-            entropy: 0.0,
-            is_answer: true,
-        }];
+        let expected_words = vec![Word::new("asset".to_string(), true)];
 
         // When
         let actual_words = filter_words_by_guesses(&input_words, &guesses);

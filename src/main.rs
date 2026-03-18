@@ -1,18 +1,20 @@
 mod entropy;
 mod filters;
 mod models;
+mod rate_limit;
 
 use actix_cors::Cors;
 use actix_web::middleware::{Compress, Logger};
 use entropy::calculate_entropy_for_words;
 use filters::filter_words_by_guesses;
-use models::Guess;
+use models::GuessBody;
 use serde_json::to_writer;
 use std::{
     fs::File,
     io::{self, BufRead, BufReader, Cursor},
     sync::OnceLock,
 };
+use rate_limit::IpRateLimiter;
 
 use actix_web::{http, post, web, App, HttpResponse, HttpServer, Responder};
 use log::info;
@@ -23,14 +25,30 @@ use crate::models::{PossibleWords, Word};
 const ALLOWED_GUESSES_FILENAME: &str = "wordle-nyt-allowed-guesses.txt";
 const ANSWERS_FILENAME: &str = "wordle-nyt-answers.txt";
 static WORD_LIST: OnceLock<Vec<Word>> = OnceLock::new();
+static RATE_LIMITER: OnceLock<IpRateLimiter> = OnceLock::new();
 
 #[post("/possible-words")]
-async fn possible_words(guesses: web::Json<Vec<Guess>>) -> impl Responder {
-    info!("Received request");
+async fn possible_words(
+    guesses: web::Json<GuessBody>,
+    req: actix_web::HttpRequest,
+) -> impl Responder {
+
+    let client_ip = req
+        .peer_addr()
+        .map_or_else(|| "0.0.0.0".parse().unwrap(), |addr| addr.ip());
+
+    if let Some(limiter) = RATE_LIMITER.get() {
+        if !limiter.check(client_ip) {
+            return HttpResponse::TooManyRequests()
+                .content_type("application/json")
+                .body(r#"{"error":"Rate limit exceeded. Maximum 1 requests per second allowed."}"#);
+        }
+    }
+
     match WORD_LIST.get() {
         Some(words) => {
-            let filtered_words = filter_words_by_guesses(words, &guesses.0);
-            let filtered_words_with_entropy = calculate_entropy_for_words(filtered_words);
+            let filtered_words = filter_words_by_guesses(words, &guesses.0.0);
+            let filtered_words_with_entropy = calculate_entropy_for_words(&filtered_words);
             let number_of_words = filtered_words_with_entropy.len();
             let total_number_of_words = words.len();
             let lowest_entropy: f32 = filtered_words_with_entropy
@@ -68,17 +86,23 @@ async fn possible_words(guesses: web::Json<Vec<Guess>>) -> impl Responder {
 }
 
 #[actix_web::main]
-async fn main() -> std::io::Result<()> {
+async fn main() -> io::Result<()> {
     env::set_var("RUST_LOG", "actix_web=info,wordle_solver=info");
     env_logger::init();
 
-    let words = get_all_words_from_file().unwrap();
+    let words = get_all_words_from_file()?;
     if WORD_LIST.set(words).is_err() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
+        return Err(std::io::Error::other(
             "Failed to initialise WORD_LIST",
         ));
-    };
+    }
+
+    let limiter = IpRateLimiter::new(1, 1.0);
+    if RATE_LIMITER.set(limiter).is_err() {
+        return Err(io::Error::other(
+            "Failed to initialise RATE_LIMITER",
+        ));
+    }
 
     info!("Starting HTTP Server on 5307");
     HttpServer::new(|| {
@@ -88,10 +112,22 @@ async fn main() -> std::io::Result<()> {
             .allowed_headers(vec![http::header::CONTENT_TYPE])
             .max_age(3600);
 
+        let json_cfg = web::JsonConfig::default().error_handler(|err, _req| {
+            let body = format!("{{\"error\":\"{err}\"}}");
+            actix_web::error::InternalError::from_response(
+                err,
+                HttpResponse::BadRequest()
+                    .content_type("application/json")
+                    .body(body),
+            )
+            .into()
+        });
+
         App::new()
             .wrap(Logger::default())
             .wrap(cors)
             .wrap(Compress::default())
+            .app_data(json_cfg)
             .service(possible_words)
     })
     .bind(("0.0.0.0", 5307))?
@@ -106,11 +142,7 @@ fn get_all_words_from_file() -> io::Result<Vec<Word>> {
         let words: Vec<Word> = r
             .lines()
             .filter_map(|line_result| {
-                line_result.ok().map(|word| Word {
-                    word,
-                    entropy: 0.0,
-                    is_answer,
-                })
+                line_result.ok().map(|word| Word::new(word, is_answer))
             })
             .collect();
         Ok(words)
