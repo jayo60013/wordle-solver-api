@@ -109,7 +109,7 @@ async fn main() -> io::Result<()> {
         let cors = Cors::default()
             .allowed_origin("https://wordlesolver.umbra.mom")
             .allowed_methods(vec!["GET", "POST", "OPTIONS"])
-            .allowed_headers(vec![http::header::CONTENT_TYPE])
+            .allow_any_header()
             .max_age(3600);
 
         let json_cfg = web::JsonConfig::default().error_handler(|err, _req| {
