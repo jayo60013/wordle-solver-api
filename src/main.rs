@@ -107,7 +107,7 @@ async fn main() -> io::Result<()> {
     info!("Starting HTTP Server on 5307");
     HttpServer::new(|| {
         let cors = Cors::default()
-            .allowed_origin("http://localhost:5173")
+            .allowed_origin("https://wordlesolver.umbra.mom")
             .allowed_methods(vec!["GET", "POST", "OPTIONS"])
             .allowed_headers(vec![http::header::CONTENT_TYPE])
             .max_age(3600);

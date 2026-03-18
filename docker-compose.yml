@@ -1,0 +1,17 @@
+services:
+  api:
+    image: your-dockerhub-username/wordle-solver-api:latest
+    restart: unless-stopped
+    # Port 5307 is only accessible internally via the nginx proxy
+
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./dist:/usr/share/nginx/html:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - api
+
