@@ -50,9 +50,65 @@ impl TryFrom<Vec<Guess>> for GuessBody {
     type Error = String;
 
     fn try_from(guesses: Vec<Guess>) -> Result<Self, Self::Error> {
-        if guesses.is_empty() || guesses.len().is_multiple_of(5) {
+        if guesses.is_empty() || !guesses.len().is_multiple_of(5) {
             return Err("All guesses must have 5 letters.".to_string());
         }
         Ok(GuessBody(guesses))
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Color, Guess, GuessBody};
+
+    fn construct_guess(turn: usize, letter: char, position: usize, color: Color) -> Guess {
+        Guess {
+            turn,
+            letter,
+            position,
+            color,
+        }
+    }
+
+    #[test]
+    fn guess_body_try_from_ok() {
+        // Given
+        let guesses = vec![
+            construct_guess(0, 'c', 0, Color::Green),
+            construct_guess(0, 'r', 1, Color::Grey),
+            construct_guess(0, 'a', 2, Color::Yellow),
+            construct_guess(0, 'n', 3, Color::Grey),
+            construct_guess(0, 'e', 4, Color::Grey),
+        ];
+
+        // When
+        let result = GuessBody::try_from(guesses.clone());
+
+        // Then
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn guess_body_try_from_rejects_empty() {
+        // Given
+        let guesses = vec![];
+
+        // When
+        let result = GuessBody::try_from(guesses);
+
+        assert_eq!(result.err(), Some("All guesses must have 5 letters.".to_string()));
+    }
+
+    #[test]
+    fn guess_body_try_from_rejects_non_multiple_of_five_lengths() {
+        // Given
+        let guesses = vec![construct_guess(0, 'c', 0, Color::Green); 4];
+
+        // When
+        let result = GuessBody::try_from(guesses);
+
+        // Then
+        assert_eq!(result.err(), Some("All guesses must have 5 letters.".to_string()));
+    }
+
 }

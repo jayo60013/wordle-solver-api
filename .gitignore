@@ -21,3 +21,5 @@ rust-project.json
 
 tarpaulin-report.html
 flamegraph.svg
+
+.idea
