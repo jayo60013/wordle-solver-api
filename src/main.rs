@@ -10,10 +10,9 @@ use entropy::calculate_entropy_for_words;
 use filters::filter_words_by_guesses;
 use models::GuessBody;
 use rate_limit::IpRateLimiter;
-use serde_json::to_writer;
 use std::{
     fs::File,
-    io::{self, BufRead, BufReader, Cursor},
+    io::{self, BufRead, BufReader},
     sync::OnceLock,
 };
 
@@ -50,14 +49,7 @@ async fn possible_words(
 
     if guesses.0 .0.is_empty() {
         if let Some(cached) = EMPTY_GUESS_CACHE.get() {
-            let mut cursor = Cursor::new(Vec::new());
-
-            return match to_writer(&mut cursor, cached) {
-                Ok(_) => HttpResponse::Ok()
-                    .content_type("application/json")
-                    .body(cursor.into_inner()),
-                Err(_) => HttpResponse::InternalServerError().finish(),
-            };
+            return HttpResponse::Ok().json(cached);
         }
     }
 
@@ -66,9 +58,14 @@ async fn possible_words(
             let filtered_words = filter_words_by_guesses(words, &guesses.0 .0);
 
             if filtered_words.is_empty() {
-                return HttpResponse::Ok()
-                    .content_type("application/json")
-                    .body("[]");
+                let response = PossibleWords {
+                    word_list: filtered_words,
+                    number_of_words: 0,
+                    total_number_of_words: words.len(),
+                    lowest_entropy: 0.0,
+                    highest_entropy: 0.0,
+                };
+                return HttpResponse::Ok().json(response);
             }
 
             let filtered_words_with_entropy = calculate_entropy_for_words(&filtered_words);
@@ -92,15 +89,7 @@ async fn possible_words(
                 lowest_entropy,
                 highest_entropy,
             };
-
-            let mut cursor = Cursor::new(Vec::new());
-            if to_writer(&mut cursor, &response).is_ok() {
-                HttpResponse::Ok()
-                    .content_type("application/json")
-                    .body(cursor.into_inner())
-            } else {
-                HttpResponse::InternalServerError().finish()
-            }
+            HttpResponse::Ok().json(response)
         }
         None => HttpResponse::InternalServerError()
             .content_type("application/json")
