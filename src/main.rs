@@ -5,6 +5,7 @@ mod rate_limit;
 
 use actix_cors::Cors;
 use actix_web::middleware::{Compress, Logger};
+use core::f32;
 use entropy::calculate_entropy_for_words;
 use filters::filter_words_by_guesses;
 use models::GuessBody;
@@ -26,6 +27,7 @@ const ALLOWED_GUESSES_FILENAME: &str = "wordle-nyt-allowed-guesses.txt";
 const ANSWERS_FILENAME: &str = "wordle-nyt-answers.txt";
 static WORD_LIST: OnceLock<Vec<Word>> = OnceLock::new();
 static RATE_LIMITER: OnceLock<IpRateLimiter> = OnceLock::new();
+static EMPTY_GUESS_CACHE: OnceLock<PossibleWords> = OnceLock::new();
 
 #[post("/possible-words")]
 async fn possible_words(
@@ -46,9 +48,29 @@ async fn possible_words(
         }
     }
 
+    if guesses.0 .0.is_empty() {
+        if let Some(cached) = EMPTY_GUESS_CACHE.get() {
+            let mut cursor = Cursor::new(Vec::new());
+
+            return match to_writer(&mut cursor, cached) {
+                Ok(_) => HttpResponse::Ok()
+                    .content_type("application/json")
+                    .body(cursor.into_inner()),
+                Err(_) => HttpResponse::InternalServerError().finish(),
+            };
+        }
+    }
+
     match WORD_LIST.get() {
         Some(words) => {
             let filtered_words = filter_words_by_guesses(words, &guesses.0 .0);
+
+            if filtered_words.is_empty() {
+                return HttpResponse::Ok()
+                    .content_type("application/json")
+                    .body("[]");
+            }
+
             let filtered_words_with_entropy = calculate_entropy_for_words(&filtered_words);
             let number_of_words = filtered_words_with_entropy.len();
             let total_number_of_words = words.len();
@@ -92,14 +114,34 @@ async fn main() -> io::Result<()> {
     env_logger::init();
 
     let words = get_all_words_from_file()?;
-    if WORD_LIST.set(words).is_err() {
-        return Err(std::io::Error::other("Failed to initialise WORD_LIST"));
-    }
+    let all_words_entropy = calculate_entropy_for_words(&words);
 
+    let all_words_response = PossibleWords {
+        word_list: all_words_entropy.clone(),
+        number_of_words: words.len(),
+        total_number_of_words: words.len(),
+        lowest_entropy: all_words_entropy
+            .iter()
+            .map(|w| w.entropy)
+            .fold(f32::INFINITY, f32::min),
+        highest_entropy: all_words_entropy
+            .iter()
+            .map(|w| w.entropy)
+            .fold(f32::NEG_INFINITY, f32::max),
+    };
+
+    WORD_LIST
+        .set(words)
+        .map_err(|_| io::Error::other("Failed to initialise WORD_LIST"))?;
+    EMPTY_GUESS_CACHE
+        .set(all_words_response)
+        .map_err(|_| io::Error::other("Failed to initialise EMPTY_GUESS_CACHE"))?;
+
+    // One request per IP per second
     let limiter = IpRateLimiter::new(1, 1.0);
-    if RATE_LIMITER.set(limiter).is_err() {
-        return Err(io::Error::other("Failed to initialise RATE_LIMITER"));
-    }
+    RATE_LIMITER
+        .set(limiter)
+        .map_err(|_| io::Error::other("Failed to initialise RATE_LIMITER"))?;
 
     info!("Starting HTTP Server on 5307");
     HttpServer::new(|| {

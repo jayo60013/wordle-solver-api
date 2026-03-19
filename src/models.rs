@@ -55,7 +55,7 @@ impl TryFrom<Vec<Guess>> for GuessBody {
     type Error = String;
 
     fn try_from(guesses: Vec<Guess>) -> Result<Self, Self::Error> {
-        if guesses.is_empty() || !guesses.len().is_multiple_of(5) {
+        if !guesses.len().is_multiple_of(5) {
             return Err("All guesses must have 5 letters.".to_string());
         }
         Ok(GuessBody(guesses))
@@ -94,17 +94,15 @@ mod tests {
     }
 
     #[test]
-    fn guess_body_try_from_rejects_empty() {
+    fn guess_body_try_from_ok_when_empty() {
         // Given
         let guesses = vec![];
 
         // When
         let result = GuessBody::try_from(guesses);
 
-        assert_eq!(
-            result.err(),
-            Some("All guesses must have 5 letters.".to_string())
-        );
+        // Then
+        assert!(result.is_ok());
     }
 
     #[test]
