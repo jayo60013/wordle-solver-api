@@ -23,7 +23,12 @@ impl Word {
     pub fn new(word: String, is_answer: bool) -> Self {
         let b = word.as_bytes();
         let bytes = [b[0], b[1], b[2], b[3], b[4]];
-        Word { word, entropy: 0.0, is_answer, bytes }
+        Word {
+            word,
+            entropy: 0.0,
+            is_answer,
+            bytes,
+        }
     }
 }
 
@@ -96,7 +101,10 @@ mod tests {
         // When
         let result = GuessBody::try_from(guesses);
 
-        assert_eq!(result.err(), Some("All guesses must have 5 letters.".to_string()));
+        assert_eq!(
+            result.err(),
+            Some("All guesses must have 5 letters.".to_string())
+        );
     }
 
     #[test]
@@ -108,7 +116,9 @@ mod tests {
         let result = GuessBody::try_from(guesses);
 
         // Then
-        assert_eq!(result.err(), Some("All guesses must have 5 letters.".to_string()));
+        assert_eq!(
+            result.err(),
+            Some("All guesses must have 5 letters.".to_string())
+        );
     }
-
 }

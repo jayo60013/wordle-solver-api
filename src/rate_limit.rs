@@ -1,7 +1,7 @@
+use parking_lot::Mutex;
+use std::collections::HashMap;
 use std::net::IpAddr;
 use std::sync::Arc;
-use std::collections::HashMap;
-use parking_lot::Mutex;
 
 pub struct IpRateLimiter {
     buckets: Arc<Mutex<HashMap<IpAddr, TokenBucket>>>,
@@ -74,7 +74,10 @@ mod tests {
         assert!(limiter.check(ip));
         assert!(limiter.check(ip));
 
-        assert!(!limiter.check(ip), "Request should be blocked when quota exceeded");
+        assert!(
+            !limiter.check(ip),
+            "Request should be blocked when quota exceeded"
+        );
     }
 
     #[test]
@@ -91,5 +94,3 @@ mod tests {
         assert!(!limiter.check(ip2), "IP2 should be rate limited");
     }
 }
-
-

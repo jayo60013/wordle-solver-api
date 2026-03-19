@@ -97,4 +97,3 @@ fn calculate_entropy_for_word(guess: [u8; 5], candidates: &[[u8; 5]]) -> f32 {
         })
         .sum()
 }
-

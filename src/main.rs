@@ -8,15 +8,15 @@ use actix_web::middleware::{Compress, Logger};
 use entropy::calculate_entropy_for_words;
 use filters::filter_words_by_guesses;
 use models::GuessBody;
+use rate_limit::IpRateLimiter;
 use serde_json::to_writer;
 use std::{
     fs::File,
     io::{self, BufRead, BufReader, Cursor},
     sync::OnceLock,
 };
-use rate_limit::IpRateLimiter;
 
-use actix_web::{http, post, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{post, web, App, HttpResponse, HttpServer, Responder};
 use log::info;
 use std::env;
 
@@ -32,7 +32,6 @@ async fn possible_words(
     guesses: web::Json<GuessBody>,
     req: actix_web::HttpRequest,
 ) -> impl Responder {
-
     let client_ip = req
         .peer_addr()
         .map_or_else(|| "0.0.0.0".parse().unwrap(), |addr| addr.ip());
@@ -41,13 +40,15 @@ async fn possible_words(
         if !limiter.check(client_ip) {
             return HttpResponse::TooManyRequests()
                 .content_type("application/json")
-                .body(r#"{"error":"Rate limit exceeded. Maximum 1 requests per second allowed."}"#);
+                .body(
+                    r#"{"error":"Rate limit exceeded. Maximum 1 requests per second allowed."}"#,
+                );
         }
     }
 
     match WORD_LIST.get() {
         Some(words) => {
-            let filtered_words = filter_words_by_guesses(words, &guesses.0.0);
+            let filtered_words = filter_words_by_guesses(words, &guesses.0 .0);
             let filtered_words_with_entropy = calculate_entropy_for_words(&filtered_words);
             let number_of_words = filtered_words_with_entropy.len();
             let total_number_of_words = words.len();
@@ -92,16 +93,12 @@ async fn main() -> io::Result<()> {
 
     let words = get_all_words_from_file()?;
     if WORD_LIST.set(words).is_err() {
-        return Err(std::io::Error::other(
-            "Failed to initialise WORD_LIST",
-        ));
+        return Err(std::io::Error::other("Failed to initialise WORD_LIST"));
     }
 
     let limiter = IpRateLimiter::new(1, 1.0);
     if RATE_LIMITER.set(limiter).is_err() {
-        return Err(io::Error::other(
-            "Failed to initialise RATE_LIMITER",
-        ));
+        return Err(io::Error::other("Failed to initialise RATE_LIMITER"));
     }
 
     info!("Starting HTTP Server on 5307");
@@ -141,9 +138,7 @@ fn get_all_words_from_file() -> io::Result<Vec<Word>> {
         let r = BufReader::new(file);
         let words: Vec<Word> = r
             .lines()
-            .filter_map(|line_result| {
-                line_result.ok().map(|word| Word::new(word, is_answer))
-            })
+            .filter_map(|line_result| line_result.ok().map(|word| Word::new(word, is_answer)))
             .collect();
         Ok(words)
     }
