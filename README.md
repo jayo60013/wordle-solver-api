@@ -11,11 +11,11 @@ Wordle word list obtained [here](https://gist.github.com/cfreshman/a7b776506c732
 
 ```json
 [
-    {"turn": 0, "letter": "b", "position": 0, "color": "GREY"},
-    {"turn": 0, "letter": "l", "position": 1, "color": "GREY"},
-    {"turn": 0, "letter": "o", "position": 2, "color": "YELLOW"},
-    {"turn": 0, "letter": "o", "position": 3, "color": "GREEN"},
-    {"turn": 0, "letter": "d", "position": 4, "color": "GREY"}
+    { "turn":0, "letter":"h", "position":0, "color":"Grey" },
+    { "turn":0, "letter":"o", "position":1, "color":"Grey" },
+    { "turn":0, "letter":"t", "position":2, "color":"Grey" },
+    { "turn":0, "letter":"e", "position":3, "color":"Grey" },
+    { "turn":0, "letter":"l", "position":4, "color":"Grey" }
 ]
 ```
 
@@ -41,5 +41,5 @@ Wordle word list obtained [here](https://gist.github.com/cfreshman/a7b776506c732
 
 - [x] Get possible words based off letter constraints
 - [x] Distinguish between a possible guess and a possible answer
-- [ ] Get best next guess
+- [x] Get best next guess
 - [ ] Analyse the way the game was played

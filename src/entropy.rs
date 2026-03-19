@@ -51,7 +51,7 @@ fn compute_pattern(guess: [u8; 5], candidate: [u8; 5]) -> u8 {
         counts[(b - b'a') as usize] += 1;
     }
 
-    let mut pattern = [0u8; 5]; // 0 = grey (default)
+    let mut pattern = [0u8; 5]; // 0 = grey
 
     for i in 0..5 {
         if guess[i] == candidate[i] {
