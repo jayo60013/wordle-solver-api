@@ -1317,6 +1317,7 @@ nutty
 nylon
 nymph
 oaken
+oasis
 obese
 occur
 ocean
