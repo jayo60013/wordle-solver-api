@@ -1,22 +1,26 @@
 mod entropy;
+mod errors;
 mod filters;
 mod models;
 mod rate_limit;
+mod state;
 
 use actix_cors::Cors;
 use actix_web::middleware::{Compress, Logger};
 use core::f32;
 use entropy::calculate_entropy_for_words;
+use errors::ApiError;
 use filters::filter_words_by_guesses;
 use models::GuessBody;
 use rate_limit::IpRateLimiter;
+use state::AppState;
 use std::{
     fs::File,
     io::{self, BufRead, BufReader},
-    sync::OnceLock,
+    net::{IpAddr, Ipv4Addr},
 };
 
-use actix_web::{post, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{post, web, App, HttpResponse, HttpServer, ResponseError};
 use log::info;
 use std::env;
 
@@ -24,77 +28,57 @@ use crate::models::{PossibleWords, Word};
 
 const ALLOWED_GUESSES_FILENAME: &str = "wordle-nyt-allowed-guesses.txt";
 const ANSWERS_FILENAME: &str = "wordle-nyt-answers.txt";
-static WORD_LIST: OnceLock<Vec<Word>> = OnceLock::new();
-static RATE_LIMITER: OnceLock<IpRateLimiter> = OnceLock::new();
-static EMPTY_GUESS_CACHE: OnceLock<PossibleWords> = OnceLock::new();
 
 #[post("/possible-words")]
 async fn possible_words(
+    state: web::Data<AppState>,
     guesses: web::Json<GuessBody>,
     req: actix_web::HttpRequest,
-) -> impl Responder {
+) -> Result<HttpResponse, ApiError> {
     let client_ip = req
         .peer_addr()
-        .map_or_else(|| "0.0.0.0".parse().unwrap(), |addr| addr.ip());
+        .map_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED), |addr| addr.ip());
 
-    if let Some(limiter) = RATE_LIMITER.get() {
-        if !limiter.check(client_ip) {
-            return HttpResponse::TooManyRequests()
-                .content_type("application/json")
-                .body(
-                    r#"{"error":"Rate limit exceeded. Maximum 1 requests per second allowed."}"#,
-                );
-        }
+    if !state.rate_limiter.check(client_ip) {
+        return Err(ApiError::rate_limited(
+            "Rate limit exceeded. Maximum 1 request per second allowed.",
+            req.path(),
+        ));
     }
 
     if guesses.0 .0.is_empty() {
-        if let Some(cached) = EMPTY_GUESS_CACHE.get() {
-            return HttpResponse::Ok().json(cached);
-        }
+        return Ok(HttpResponse::Ok().json(&state.empty_guess_cache));
     }
 
-    match WORD_LIST.get() {
-        Some(words) => {
-            let filtered_words = filter_words_by_guesses(words, &guesses.0 .0);
+    let filtered_words = filter_words_by_guesses(&state.words, &guesses.0 .0);
 
-            if filtered_words.is_empty() {
-                let response = PossibleWords {
-                    word_list: filtered_words,
-                    number_of_words: 0,
-                    total_number_of_words: words.len(),
-                    lowest_entropy: 0.0,
-                    highest_entropy: 0.0,
-                };
-                return HttpResponse::Ok().json(response);
-            }
-
-            let filtered_words_with_entropy = calculate_entropy_for_words(&filtered_words);
-            let number_of_words = filtered_words_with_entropy.len();
-            let total_number_of_words = words.len();
-            let lowest_entropy: f32 = filtered_words_with_entropy
-                .iter()
-                .min_by(|a, b| a.entropy.partial_cmp(&b.entropy).unwrap())
-                .map(|w| w.entropy)
-                .unwrap();
-            let highest_entropy: f32 = filtered_words_with_entropy
-                .iter()
-                .max_by(|a, b| a.entropy.partial_cmp(&b.entropy).unwrap())
-                .map(|w| w.entropy)
-                .unwrap();
-
-            let response = PossibleWords {
-                word_list: filtered_words_with_entropy,
-                number_of_words,
-                total_number_of_words,
-                lowest_entropy,
-                highest_entropy,
-            };
-            HttpResponse::Ok().json(response)
-        }
-        None => HttpResponse::InternalServerError()
-            .content_type("application/json")
-            .body(r#"{"error":"Word list not initialised"}"#),
+    if filtered_words.is_empty() {
+        let response = PossibleWords {
+            word_list: filtered_words,
+            number_of_words: 0,
+            total_number_of_words: state.words.len(),
+            lowest_entropy: 0.0,
+            highest_entropy: 0.0,
+        };
+        return Ok(HttpResponse::Ok().json(response));
     }
+
+    let filtered_words_with_entropy = calculate_entropy_for_words(&filtered_words);
+
+    let response = PossibleWords {
+        word_list: filtered_words_with_entropy.clone(),
+        number_of_words: filtered_words_with_entropy.len(),
+        total_number_of_words: state.words.len(),
+        lowest_entropy: filtered_words_with_entropy
+            .iter()
+            .map(|w| w.entropy)
+            .fold(f32::INFINITY, f32::min),
+        highest_entropy: filtered_words_with_entropy
+            .iter()
+            .map(|w| w.entropy)
+            .fold(f32::NEG_INFINITY, f32::max),
+    };
+    Ok(HttpResponse::Ok().json(response))
 }
 
 #[actix_web::main]
@@ -119,21 +103,15 @@ async fn main() -> io::Result<()> {
             .fold(f32::NEG_INFINITY, f32::max),
     };
 
-    WORD_LIST
-        .set(words)
-        .map_err(|_| io::Error::other("Failed to initialise WORD_LIST"))?;
-    EMPTY_GUESS_CACHE
-        .set(all_words_response)
-        .map_err(|_| io::Error::other("Failed to initialise EMPTY_GUESS_CACHE"))?;
-
     // One request per IP per second
-    let limiter = IpRateLimiter::new(1, 1.0);
-    RATE_LIMITER
-        .set(limiter)
-        .map_err(|_| io::Error::other("Failed to initialise RATE_LIMITER"))?;
+    let app_state = web::Data::new(AppState::new(
+        words,
+        all_words_response,
+        IpRateLimiter::new(1, 1.0),
+    ));
 
     info!("Starting HTTP Server on 5307");
-    HttpServer::new(|| {
+    HttpServer::new(move || {
         let cors = Cors::default()
             .allowed_origin("https://wordlesolver.umbra.mom")
             .allowed_methods(vec!["GET", "POST", "OPTIONS"])
@@ -141,17 +119,12 @@ async fn main() -> io::Result<()> {
             .max_age(3600);
 
         let json_cfg = web::JsonConfig::default().error_handler(|err, _req| {
-            let body = format!("{{\"error\":\"{err}\"}}");
-            actix_web::error::InternalError::from_response(
-                err,
-                HttpResponse::BadRequest()
-                    .content_type("application/json")
-                    .body(body),
-            )
-            .into()
+            let api_error = ApiError::bad_request(err.to_string(), _req.path());
+            actix_web::error::InternalError::from_response(err, api_error.error_response()).into()
         });
 
         App::new()
+            .app_data(app_state.clone())
             .wrap(Logger::default())
             .wrap(cors)
             .wrap(Compress::default())
