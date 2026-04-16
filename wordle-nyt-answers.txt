@@ -498,6 +498,7 @@ crush
 crust
 crypt
 cubic
+cubit
 cumin
 curio
 curly

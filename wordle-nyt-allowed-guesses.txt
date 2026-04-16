@@ -787,7 +787,6 @@ cubeb
 cubed
 cuber
 cubes
-cubit
 cuddy
 cuffs
 cuing
