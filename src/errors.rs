@@ -64,8 +64,9 @@ impl ApiError {
 impl fmt::Display for ApiError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::BadRequest { detail, .. }
-            | Self::RateLimited { detail, .. } => write!(f, "{detail}"),
+            Self::BadRequest { detail, .. } | Self::RateLimited { detail, .. } => {
+                write!(f, "{detail}")
+            }
         }
     }
 }
