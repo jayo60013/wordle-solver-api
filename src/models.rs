@@ -51,6 +51,11 @@ pub struct Guess {
 #[serde(try_from = "Vec<Guess>")]
 pub struct GuessBody(pub Vec<Guess>);
 
+#[derive(Deserialize)]
+pub struct GameAnalysisRequest {
+    pub guesses: GuessBody,
+}
+
 impl TryFrom<Vec<Guess>> for GuessBody {
     type Error = String;
 

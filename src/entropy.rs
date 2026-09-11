@@ -3,6 +3,32 @@ use itertools::Itertools;
 use rayon::prelude::*;
 use std::collections::HashMap;
 
+pub struct FeedbackTable {
+    answer_count: usize,
+    patterns: Vec<u8>,
+}
+
+impl FeedbackTable {
+    pub fn new(legal_guesses: &[Word], answers: &[Word]) -> Self {
+        let patterns = legal_guesses
+            .par_iter()
+            .flat_map_iter(|guess| {
+                answers
+                    .iter()
+                    .map(move |answer| compute_pattern(guess.bytes, answer.bytes))
+            })
+            .collect();
+        Self {
+            answer_count: answers.len(),
+            patterns,
+        }
+    }
+
+    pub fn pattern(&self, guess_index: usize, answer_index: usize) -> u8 {
+        self.patterns[guess_index * self.answer_count + answer_index]
+    }
+}
+
 pub fn calculate_entropy_for_words(words: &[Word]) -> Vec<Word> {
     let word_bytes: Vec<[u8; 5]> = words.iter().map(|w| w.bytes).collect();
 
@@ -45,7 +71,7 @@ pub fn calculate_entropy_for_words(words: &[Word]) -> Vec<Word> {
         .collect()
 }
 
-fn compute_pattern(guess: [u8; 5], candidate: [u8; 5]) -> u8 {
+pub fn compute_pattern(guess: [u8; 5], candidate: [u8; 5]) -> u8 {
     let mut counts = [0u8; 26];
     for b in candidate {
         counts[(b - b'a') as usize] += 1;

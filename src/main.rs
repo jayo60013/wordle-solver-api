@@ -1,3 +1,4 @@
+mod analysis;
 mod entropy;
 mod errors;
 mod filters;
@@ -8,10 +9,9 @@ mod state;
 use actix_cors::Cors;
 use actix_web::middleware::{Compress, Logger};
 use core::f32;
-use entropy::calculate_entropy_for_words;
+use entropy::{calculate_entropy_for_words, FeedbackTable};
 use errors::ApiError;
 use filters::filter_words_by_guesses;
-use models::GuessBody;
 use rate_limit::IpRateLimiter;
 use state::AppState;
 use std::{
@@ -24,7 +24,10 @@ use actix_web::{post, web, App, HttpResponse, HttpServer, ResponseError};
 use log::info;
 use std::env;
 
-use crate::models::{PossibleWords, Word};
+use crate::{
+    analysis::analyse_game,
+    models::{GameAnalysisRequest, GuessBody, PossibleWords, Word},
+};
 
 const ALLOWED_GUESSES_FILENAME: &str = "wordle-nyt-allowed-guesses.txt";
 const ANSWERS_FILENAME: &str = "wordle-nyt-answers.txt";
@@ -81,12 +84,40 @@ async fn possible_words(
     Ok(HttpResponse::Ok().json(response))
 }
 
+#[post("/game-analyses")]
+async fn game_analyses(
+    state: web::Data<AppState>,
+    analysis_request: web::Json<GameAnalysisRequest>,
+    req: actix_web::HttpRequest,
+) -> Result<HttpResponse, ApiError> {
+    let client_ip = req
+        .peer_addr()
+        .map_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED), |addr| addr.ip());
+    if !state.rate_limiter.check(client_ip) {
+        return Err(ApiError::rate_limited(
+            "Rate limit exceeded. Maximum 1 request per second allowed.",
+            req.path(),
+        ));
+    }
+
+    analyse_game(
+        &analysis_request.guesses.0,
+        &state.answers,
+        &state.legal_guesses,
+        &state.feedback_table,
+    )
+    .map(|analysis| HttpResponse::Ok().json(analysis))
+    .map_err(|detail| ApiError::bad_request(detail, req.path()))
+}
+
 #[actix_web::main]
 async fn main() -> io::Result<()> {
     env::set_var("RUST_LOG", "actix_web=info,wordle_solver=info");
     env_logger::init();
 
-    let words = get_all_words_from_file()?;
+    let (answers, legal_guesses) = get_all_words_from_file()?;
+    let words = legal_guesses.clone();
+    let feedback_table = FeedbackTable::new(&legal_guesses, &answers);
     let all_words_entropy = calculate_entropy_for_words(&words);
 
     let all_words_response = PossibleWords {
@@ -106,6 +137,9 @@ async fn main() -> io::Result<()> {
     // One request per IP per second
     let app_state = web::Data::new(AppState::new(
         words,
+        answers,
+        legal_guesses,
+        feedback_table,
         all_words_response,
         IpRateLimiter::new(1, 1.0),
     ));
@@ -130,13 +164,14 @@ async fn main() -> io::Result<()> {
             .wrap(Compress::default())
             .app_data(json_cfg)
             .service(possible_words)
+            .service(game_analyses)
     })
     .bind(("0.0.0.0", 5307))?
     .run()
     .await
 }
 
-fn get_all_words_from_file() -> io::Result<Vec<Word>> {
+fn get_all_words_from_file() -> io::Result<(Vec<Word>, Vec<Word>)> {
     fn read_words_from_file(filename: &str, is_answer: bool) -> io::Result<Vec<Word>> {
         let file = File::open(filename)?;
         let r = BufReader::new(file);
@@ -147,9 +182,9 @@ fn get_all_words_from_file() -> io::Result<Vec<Word>> {
         Ok(words)
     }
 
-    let mut words = read_words_from_file(ANSWERS_FILENAME, true)?;
+    let answers = read_words_from_file(ANSWERS_FILENAME, true)?;
     let allowed_guesses = read_words_from_file(ALLOWED_GUESSES_FILENAME, false)?;
-
-    words.extend(allowed_guesses);
-    Ok(words)
+    let mut legal_guesses = answers.clone();
+    legal_guesses.extend(allowed_guesses);
+    Ok((answers, legal_guesses))
 }

@@ -96,7 +96,6 @@ aspic
 assai
 assam
 asses
-aster
 astir
 atilt
 atlas
@@ -3601,7 +3600,6 @@ sough
 souks
 souls
 soups
-soupy
 sours
 souse
 sowed

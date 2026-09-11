@@ -6,6 +6,21 @@ Wordle word list obtained [here](https://gist.github.com/cfreshman/a7b776506c732
 ## Endpoints
 
 - `POST /possible-words` - returns all possible words based on the constraints given by grey, yellow and green letters.
+- `POST /game-analyses` - validates a completed hard-mode win and returns skill, luck, and five best next guesses for each turn.
+
+### Game analysis payload
+
+```json
+{
+  "guesses": [
+    { "turn": 0, "letter": "c", "position": 0, "color": "Green" },
+    { "turn": 0, "letter": "i", "position": 1, "color": "Green" },
+    { "turn": 0, "letter": "g", "position": 2, "color": "Green" },
+    { "turn": 0, "letter": "a", "position": 3, "color": "Green" },
+    { "turn": 0, "letter": "r", "position": 4, "color": "Green" }
+  ]
+}
+```
 
 ### Example Payload
 

@@ -116,6 +116,7 @@ aside
 askew
 assay
 asset
+aster
 atoll
 atone
 attic
@@ -1841,6 +1842,7 @@ sooth
 sooty
 sorry
 sound
+soupy
 south
 sower
 space
