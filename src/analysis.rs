@@ -221,10 +221,6 @@ fn validate_game(
             }
             letters[guess.position] = guess.letter;
         }
-        if letters.contains(&' ') {
-            return Err("Each turn must contain positions 0 through 4.".to_string());
-        }
-
         let word = letters.iter().collect::<String>();
         if !legal_words.contains(word.as_str()) {
             return Err(format!("'{word}' is not a legal NYT Wordle guess."));
@@ -455,33 +451,286 @@ mod tests {
             .collect()
     }
 
-    #[test]
-    fn analyses_a_valid_hard_mode_win() {
-        let answers = vec![word("cigar", true), word("rebut", true)];
-        let legal_guesses = vec![word("cigar", true), word("rebut", true)];
-        let feedback_table = FeedbackTable::new(&legal_guesses, &answers);
-        let mut guesses = row(
-            0,
-            "rebut",
-            [
-                Color::Yellow,
-                Color::Grey,
-                Color::Grey,
-                Color::Grey,
-                Color::Grey,
-            ],
-        );
-        guesses.extend(row(1, "cigar", [Color::Green; 5]));
+    fn feedback_row(turn: usize, value: &str, answer: &str) -> Vec<Guess> {
+        let guess = word(value, false);
+        let answer = word(answer, true);
+        let pattern = compute_pattern(guess.bytes, answer.bytes);
+        row(
+            turn,
+            value,
+            std::array::from_fn(|position| match (pattern / 3u8.pow(position as u32)) % 3 {
+                0 => Color::Grey,
+                1 => Color::Yellow,
+                2 => Color::Green,
+                _ => unreachable!("a Wordle pattern is base three"),
+            }),
+        )
+    }
 
+    fn analysis_inputs() -> (Vec<Word>, Vec<Word>, FeedbackTable) {
+        let answers = vec![word("cigar", true), word("rebut", true)];
+        let legal_guesses = vec![
+            word("cigar", true),
+            word("rebut", true),
+            word("adieu", false),
+            word("stare", false),
+            word("slate", false),
+            word("crane", false),
+        ];
+        let feedback_table = FeedbackTable::new(&legal_guesses, &answers);
+
+        (answers, legal_guesses, feedback_table)
+    }
+
+    fn error_message(result: Result<GameAnalysis, String>) -> String {
+        match result {
+            Ok(_) => panic!("expected game analysis to fail"),
+            Err(message) => message,
+        }
+    }
+
+    #[test]
+    fn rejects_invalid_game_lengths() {
+        // Given
+        let (answers, legal_guesses, feedback_table) = analysis_inputs();
+        let empty_game = Vec::new();
+        let incomplete_game = vec![
+            Guess {
+                turn: 0,
+                letter: 'c',
+                position: 0,
+                color: Color::Grey,
+            };
+            4
+        ];
+        let too_long_game = vec![
+            Guess {
+                turn: 0,
+                letter: 'c',
+                position: 0,
+                color: Color::Grey,
+            };
+            35
+        ];
+
+        // When
+        let empty_result = analyse_game(&empty_game, &answers, &legal_guesses, &feedback_table);
+        let incomplete_result =
+            analyse_game(&incomplete_game, &answers, &legal_guesses, &feedback_table);
+        let too_long_result =
+            analyse_game(&too_long_game, &answers, &legal_guesses, &feedback_table);
+
+        // Then
+        assert_eq!(
+            error_message(empty_result),
+            "A game must contain between 1 and 6 complete rows."
+        );
+        assert_eq!(
+            error_message(incomplete_result),
+            "A game must contain between 1 and 6 complete rows."
+        );
+        assert_eq!(
+            error_message(too_long_result),
+            "A game must contain between 1 and 6 complete rows."
+        );
+    }
+
+    #[test]
+    fn rejects_non_contiguous_turns() {
+        // Given
+        let (answers, legal_guesses, feedback_table) = analysis_inputs();
+        let mut guesses = feedback_row(0, "rebut", "cigar");
+        guesses.extend(feedback_row(2, "cigar", "cigar"));
+
+        // When
+        let result = analyse_game(&guesses, &answers, &legal_guesses, &feedback_table);
+
+        // Then
+        assert_eq!(
+            error_message(result),
+            "Turns must be contiguous and each must contain exactly 5 letters."
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_letter_or_position() {
+        // Given
+        let (answers, legal_guesses, feedback_table) = analysis_inputs();
+        let invalid_letter = row(0, "cigar", [Color::Green; 5])
+            .into_iter()
+            .enumerate()
+            .map(|(position, mut guess)| {
+                if position == 0 {
+                    guess.letter = 'C';
+                }
+                guess
+            })
+            .collect::<Vec<_>>();
+        let invalid_position = row(0, "cigar", [Color::Green; 5])
+            .into_iter()
+            .enumerate()
+            .map(|(position, mut guess)| {
+                if position == 4 {
+                    guess.position = 5;
+                }
+                guess
+            })
+            .collect::<Vec<_>>();
+
+        // When
+        let letter_result =
+            analyse_game(&invalid_letter, &answers, &legal_guesses, &feedback_table);
+        let position_result =
+            analyse_game(&invalid_position, &answers, &legal_guesses, &feedback_table);
+
+        // Then
+        assert_eq!(
+            error_message(letter_result),
+            "Letters must be lowercase ASCII characters in positions 0 through 4."
+        );
+        assert_eq!(
+            error_message(position_result),
+            "Letters must be lowercase ASCII characters in positions 0 through 4."
+        );
+    }
+
+    #[test]
+    fn rejects_duplicate_positions() {
+        // Given
+        let (answers, legal_guesses, feedback_table) = analysis_inputs();
+        let guesses = row(0, "cigar", [Color::Green; 5])
+            .into_iter()
+            .enumerate()
+            .map(|(index, mut guess)| {
+                if index == 4 {
+                    guess.position = 3;
+                }
+                guess
+            })
+            .collect::<Vec<_>>();
+
+        // When
+        let result = analyse_game(&guesses, &answers, &legal_guesses, &feedback_table);
+
+        // Then
+        assert_eq!(
+            error_message(result),
+            "Each position may appear only once per turn."
+        );
+    }
+
+    #[test]
+    fn rejects_illegal_guesses_and_invalid_winning_words() {
+        // Given
+        let (answers, legal_guesses, feedback_table) = analysis_inputs();
+        let illegal_guess = row(0, "xxxxx", [Color::Green; 5]);
+        let non_answer_win = row(0, "adieu", [Color::Green; 5]);
+
+        // When
+        let illegal_result =
+            analyse_game(&illegal_guess, &answers, &legal_guesses, &feedback_table);
+        let non_answer_result =
+            analyse_game(&non_answer_win, &answers, &legal_guesses, &feedback_table);
+
+        // Then
+        assert_eq!(
+            error_message(illegal_result),
+            "'xxxxx' is not a legal NYT Wordle guess."
+        );
+        assert_eq!(
+            error_message(non_answer_result),
+            "The winning word must be an NYT Wordle answer."
+        );
+    }
+
+    #[test]
+    fn rejects_non_winning_final_rows_and_incorrect_feedback() {
+        // Given
+        let (answers, legal_guesses, feedback_table) = analysis_inputs();
+        let non_winning_final_row = row(0, "rebut", [Color::Grey; 5]);
+        let mut incorrect_feedback = row(0, "rebut", [Color::Grey; 5]);
+        incorrect_feedback.extend(row(1, "cigar", [Color::Green; 5]));
+
+        // When
+        let final_row_result = analyse_game(
+            &non_winning_final_row,
+            &answers,
+            &legal_guesses,
+            &feedback_table,
+        );
+        let feedback_result = analyse_game(
+            &incorrect_feedback,
+            &answers,
+            &legal_guesses,
+            &feedback_table,
+        );
+
+        // Then
+        assert_eq!(
+            error_message(final_row_result),
+            "The final row must be a winning guess with five green letters."
+        );
+        assert_eq!(
+            error_message(feedback_result),
+            "Feedback for 'rebut' does not match the winning answer."
+        );
+    }
+
+    #[test]
+    fn rejects_games_continued_after_a_win() {
+        // Given
+        let (answers, legal_guesses, feedback_table) = analysis_inputs();
+        let mut guesses = feedback_row(0, "cigar", "cigar");
+        guesses.extend(feedback_row(1, "cigar", "cigar"));
+
+        // When
+        let result = analyse_game(&guesses, &answers, &legal_guesses, &feedback_table);
+
+        // Then
+        assert_eq!(
+            error_message(result),
+            "A game cannot contain guesses after a winning row."
+        );
+    }
+
+    #[test]
+    fn analyses_hard_mode_win_with_ranked_top_five_and_metrics() {
+        // Given
+        let (answers, legal_guesses, feedback_table) = analysis_inputs();
+        let mut guesses = feedback_row(0, "rebut", "cigar");
+        guesses.extend(feedback_row(1, "cigar", "cigar"));
+
+        // When
         let result = analyse_game(&guesses, &answers, &legal_guesses, &feedback_table).unwrap();
 
+        // Then
         assert_eq!(result.answer, "cigar");
-        assert_eq!(result.turn_analysis.len(), 2);
-        assert!(result.turn_analysis[0].best_guesses.len() <= 5);
+        assert_eq!(result.turns, 2);
+        assert_eq!(result.turn_analysis[0].possible_answer_count_before, 2);
+        assert_eq!(result.turn_analysis[0].possible_answer_count_after, 1);
+        assert_eq!(result.turn_analysis[0].best_guesses.len(), 5);
+        assert_eq!(
+            result.turn_analysis[0]
+                .best_guesses
+                .iter()
+                .map(|guess| guess.word.as_str())
+                .collect::<Vec<_>>(),
+            vec!["adieu", "cigar", "crane", "rebut", "slate"]
+        );
+        assert!(result.turn_analysis[0]
+            .best_guesses
+            .windows(2)
+            .all(|pair| pair[0].entropy_percent >= pair[1].entropy_percent));
+        assert_eq!(result.turn_analysis[1].best_guesses.len(), 3);
+        assert_eq!(result.turn_analysis[1].best_guesses[0].word, "cigar");
+        assert_eq!(result.turn_analysis[1].skill_percent, 100.0);
+        assert_eq!(result.skill.score_percent, 100.0);
+        assert!(result.luck.score_percent.is_finite());
     }
 
     #[test]
     fn rejects_a_guess_that_ignores_a_green_hard_mode_clue() {
+        // Given
         let answers = vec![word("cigar", true), word("cider", true)];
         let legal_guesses = vec![
             word("cigar", true),
@@ -513,9 +762,97 @@ mod tests {
         ));
         guesses.extend(row(2, "cigar", [Color::Green; 5]));
 
-        assert!(matches!(
-            analyse_game(&guesses, &answers, &legal_guesses, &feedback_table),
-            Err(message) if message.contains("hard-mode")
-        ));
+        // When
+        let result = analyse_game(&guesses, &answers, &legal_guesses, &feedback_table);
+
+        // Then
+        assert_eq!(
+            error_message(result),
+            "'rebut' does not satisfy hard-mode clues from previous turns."
+        );
+    }
+
+    #[test]
+    fn hard_mode_requires_yellows_elsewhere_and_known_letter_multiplicity() {
+        // Given
+        let yellow_r_at_first_position = row(
+            0,
+            "rebut",
+            [
+                Color::Yellow,
+                Color::Grey,
+                Color::Grey,
+                Color::Grey,
+                Color::Grey,
+            ],
+        );
+        let two_yellow_a_letters = row(
+            1,
+            "aaaab",
+            [
+                Color::Yellow,
+                Color::Yellow,
+                Color::Grey,
+                Color::Grey,
+                Color::Grey,
+            ],
+        );
+        let yellow_in_same_position = word("rebut", false);
+        let missing_second_a = word("cigar", true);
+        let valid_word = word("bbaca", false);
+
+        // When
+        let same_position_result =
+            satisfies_hard_mode(&yellow_in_same_position, &yellow_r_at_first_position);
+        let missing_count_result = satisfies_hard_mode(&missing_second_a, &two_yellow_a_letters);
+        let valid_result = satisfies_hard_mode(&valid_word, &two_yellow_a_letters);
+
+        // Then
+        assert!(!same_position_result);
+        assert!(!missing_count_result);
+        assert!(valid_result);
+    }
+
+    #[test]
+    fn scores_single_candidate_games_without_entropy_or_luck_variance() {
+        // Given
+        let answers = vec![word("cigar", true)];
+        let legal_guesses = vec![word("cigar", true)];
+        let feedback_table = FeedbackTable::new(&legal_guesses, &answers);
+        let guesses = row(0, "cigar", [Color::Green; 5]);
+
+        // When
+        let result = analyse_game(&guesses, &answers, &legal_guesses, &feedback_table).unwrap();
+
+        // Then
+        assert_eq!(result.turn_analysis[0].skill_percent, 100.0);
+        assert_eq!(result.turn_analysis[0].luck_percent, 100.0);
+        assert_eq!(result.skill.score_percent, 100.0);
+        assert_eq!(result.luck.score_percent, 50.0);
+    }
+
+    #[test]
+    fn numerical_helpers_handle_zero_totals_bounds_and_both_normal_tails() {
+        // Given
+        let positive_value = 1.0;
+        let negative_value = -1.0;
+
+        // When
+        let no_opportunity = percent_of(2.0, 0.0, 42.0);
+        let upper_bound = percent_of(3.0, 1.0, 0.0);
+        let lower_bound = percent_of(-3.0, 1.0, 0.0);
+        let neutral_luck = overall_luck_percent(10.0, 0.0);
+        let positive_tail = normal_cdf(positive_value);
+        let negative_tail = normal_cdf(negative_value);
+        let positive_luck = overall_luck_percent(positive_value, 1.0);
+
+        // Then
+        assert_eq!(no_opportunity, 42.0);
+        assert_eq!(upper_bound, 100.0);
+        assert_eq!(lower_bound, -100.0);
+        assert_eq!(neutral_luck, 50.0);
+        assert!((positive_tail - 0.8413).abs() < 0.0001);
+        assert!((negative_tail - 0.1587).abs() < 0.0001);
+        assert!((positive_luck - positive_tail * 100.0).abs() < f64::EPSILON);
     }
 }
