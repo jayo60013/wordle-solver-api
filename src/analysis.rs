@@ -176,8 +176,8 @@ pub fn analyse_game(
     })
 }
 
-fn validate_game<'a>(
-    guesses: &'a [Guess],
+fn validate_game(
+    guesses: &[Guess],
     answers: &[Word],
     legal_guesses: &[Word],
 ) -> Result<Vec<(String, Vec<Guess>)>, String> {
