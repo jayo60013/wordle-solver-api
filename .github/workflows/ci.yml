@@ -48,8 +48,8 @@ jobs:
       - name: Cache Dependencies
         uses: Swatinem/rust-cache@v2
 
+      - name: Install Tarpaulin
+        run: cargo install cargo-tarpaulin --locked
+
       - name: Run Code Coverage with Tarpaulin
-        uses: actions-rs/tarpaulin@v0.1
-        with:
-          version: latest
-          args: --fail-under 100 --exclude-files src/main.rs src/entropy.rs src/errors.rs src/state.rs
+        run: cargo tarpaulin --fail-under 100 --exclude-files src/main.rs src/entropy.rs src/errors.rs src/state.rs
