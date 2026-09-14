@@ -44,7 +44,6 @@ pub struct RankedGuess {
 }
 
 struct TurnScore {
-    entropy: f64,
     information: f64,
     variance: f64,
     luck_percent: f64,
@@ -57,7 +56,7 @@ pub fn analyse_game(
     legal_guesses: &[Word],
     feedback_table: &FeedbackTable,
 ) -> Result<GameAnalysis, String> {
-    let rows = validate_game(guesses, answers, legal_guesses)?;
+    let rows = validate_game(guesses, answers)?;
     let answer = rows
         .last()
         .expect("validated game has a final row")
@@ -125,25 +124,25 @@ pub fn analyse_game(
             });
         }
 
-        let selected_index = legal_word_indices[word.as_str()];
-        let score = score_outcome(
-            selected_index,
-            answer_index,
-            &candidate_indices,
-            feedback_table,
-        );
+        let selected_entropy = legal_word_indices
+            .get(word.as_str())
+            .map(|selected_index| {
+                entropy_for_guess(*selected_index, &candidate_indices, feedback_table)
+            })
+            .unwrap_or_else(|| entropy_for_custom_guess(word, answers, &candidate_indices));
+        let score = score_outcome(word, answer_index, answers, &candidate_indices, feedback_table);
         let maximum_entropy = (candidate_indices.len() as f64).log2();
 
-        total_entropy += score.entropy;
+        total_entropy += selected_entropy;
         total_best_entropy += best_entropy;
-        total_luck_delta += score.information - score.entropy;
+        total_luck_delta += score.information - selected_entropy;
         total_luck_variance += score.variance;
 
         turn_analysis.push(TurnAnalysis {
             turn,
             possible_answer_count_before: candidate_indices.len(),
             possible_answer_count_after: score.possible_answer_count_after,
-            skill_percent: percent_of(score.entropy, best_entropy, 100.0),
+            skill_percent: percent_of(selected_entropy, best_entropy, 100.0),
             luck_percent: score.luck_percent,
             best_guesses: ranked
                 .iter()
@@ -158,8 +157,9 @@ pub fn analyse_game(
 
         prior_guesses.extend(row.iter().cloned());
         let selected_pattern = encode_pattern(row);
+        let selected_word = Word::new(word.clone(), false);
         candidate_indices.retain(|answer_index| {
-            feedback_table.pattern(selected_index, *answer_index) == selected_pattern
+            compute_pattern(selected_word.bytes, answers[*answer_index].bytes) == selected_pattern
         });
     }
 
@@ -179,17 +179,12 @@ pub fn analyse_game(
 fn validate_game(
     guesses: &[Guess],
     answers: &[Word],
-    legal_guesses: &[Word],
 ) -> Result<Vec<(String, Vec<Guess>)>, String> {
     if guesses.is_empty() || guesses.len() > 30 || !guesses.len().is_multiple_of(5) {
         return Err("A game must contain between 1 and 6 complete rows.".to_string());
     }
 
     let turn_count = guesses.len() / 5;
-    let legal_words = legal_guesses
-        .iter()
-        .map(|word| word.word.as_str())
-        .collect::<HashSet<_>>();
     let answer_words = answers
         .iter()
         .map(|word| word.word.as_str())
@@ -222,9 +217,6 @@ fn validate_game(
             letters[guess.position] = guess.letter;
         }
         let word = letters.iter().collect::<String>();
-        if !legal_words.contains(word.as_str()) {
-            return Err(format!("'{word}' is not a legal NYT Wordle guess."));
-        }
         rows.push((word, row));
     }
 
@@ -247,10 +239,7 @@ fn validate_game(
         .find(|word| word.word == *final_word)
         .expect("validated answer exists");
     for (word, row) in &rows {
-        let guess = legal_guesses
-            .iter()
-            .find(|candidate| candidate.word == *word)
-            .expect("validated guess exists");
+        let guess = Word::new(word.clone(), answer.word == *word);
         if encode_pattern(row) != compute_pattern(guess.bytes, answer.bytes) {
             return Err(format!(
                 "Feedback for '{word}' does not match the winning answer."
@@ -266,11 +255,8 @@ fn validate_game(
 
     let mut prior_guesses = Vec::new();
     for (word, row) in &rows {
-        let guess = legal_guesses
-            .iter()
-            .find(|candidate| candidate.word == *word)
-            .expect("validated guess exists");
-        if !satisfies_hard_mode(guess, &prior_guesses) {
+        let guess = Word::new(word.clone(), answer.word == *word);
+        if !satisfies_hard_mode(&guess, &prior_guesses) {
             return Err(format!(
                 "'{word}' does not satisfy hard-mode clues from previous turns."
             ));
@@ -335,14 +321,20 @@ fn entropy_for_guess(
 }
 
 fn score_outcome(
-    guess_index: usize,
+    guess_word: &str,
     answer_index: usize,
+    answers: &[Word],
     candidate_indices: &[usize],
     feedback_table: &FeedbackTable,
 ) -> TurnScore {
-    let buckets = pattern_buckets(guess_index, candidate_indices, feedback_table);
+    let buckets =
+        pattern_buckets_for_guess(guess_word, answers, candidate_indices, Some(feedback_table));
     let total = candidate_indices.len() as f64;
-    let observed_count = buckets[feedback_table.pattern(guess_index, answer_index) as usize];
+    let observed_pattern = compute_pattern(
+        Word::new(guess_word.to_string(), false).bytes,
+        answers[answer_index].bytes,
+    ) as usize;
+    let observed_count = buckets[observed_pattern];
     let observed_probability = observed_count as f64 / total;
     let information = -observed_probability.log2();
     let entropy = buckets
@@ -369,12 +361,22 @@ fn score_outcome(
             .map(|count| count as f64 / total)
             .sum::<f64>();
     TurnScore {
-        entropy,
         information,
         variance,
         luck_percent,
         possible_answer_count_after: observed_count as usize,
     }
+}
+
+fn entropy_for_custom_guess(guess_word: &str, answers: &[Word], candidate_indices: &[usize]) -> f64 {
+    pattern_buckets_for_guess(guess_word, answers, candidate_indices, None)
+        .into_iter()
+        .filter(|count| *count > 0)
+        .map(|count| {
+            let probability = count as f64 / candidate_indices.len() as f64;
+            -probability * probability.log2()
+        })
+        .sum()
 }
 
 fn pattern_buckets(
@@ -385,6 +387,30 @@ fn pattern_buckets(
     let mut buckets = [0u16; 243];
     for answer_index in candidate_indices {
         buckets[feedback_table.pattern(guess_index, *answer_index) as usize] += 1;
+    }
+    buckets
+}
+
+fn pattern_buckets_for_guess(
+    guess_word: &str,
+    answers: &[Word],
+    candidate_indices: &[usize],
+    feedback_table: Option<&FeedbackTable>,
+) -> [u16; 243] {
+    if let Some((guess_index, _)) = feedback_table.and_then(|table| {
+        answers
+            .iter()
+            .position(|word| word.word == guess_word)
+            .map(|index| (index, table))
+    })
+    {
+        return pattern_buckets(guess_index, candidate_indices, feedback_table.expect("table exists"));
+    }
+
+    let guess = Word::new(guess_word.to_string(), false);
+    let mut buckets = [0u16; 243];
+    for answer_index in candidate_indices {
+        buckets[compute_pattern(guess.bytes, answers[*answer_index].bytes) as usize] += 1;
     }
     buckets
 }
@@ -620,23 +646,21 @@ mod tests {
     }
 
     #[test]
-    fn rejects_illegal_guesses_and_invalid_winning_words() {
+    fn allows_non_wordle_guesses_but_rejects_invalid_winning_words() {
         // Given
         let (answers, legal_guesses, feedback_table) = analysis_inputs();
-        let illegal_guess = row(0, "xxxxx", [Color::Green; 5]);
+        let mut unconventional_guess = row(0, "xxxxx", [Color::Grey; 5]);
+        unconventional_guess.extend(row(1, "cigar", [Color::Green; 5]));
         let non_answer_win = row(0, "adieu", [Color::Green; 5]);
 
         // When
-        let illegal_result =
-            analyse_game(&illegal_guess, &answers, &legal_guesses, &feedback_table);
+        let unconventional_result =
+            analyse_game(&unconventional_guess, &answers, &legal_guesses, &feedback_table);
         let non_answer_result =
             analyse_game(&non_answer_win, &answers, &legal_guesses, &feedback_table);
 
         // Then
-        assert_eq!(
-            error_message(illegal_result),
-            "'xxxxx' is not a legal NYT Wordle guess."
-        );
+        assert!(unconventional_result.is_ok());
         assert_eq!(
             error_message(non_answer_result),
             "The winning word must be an NYT Wordle answer."
