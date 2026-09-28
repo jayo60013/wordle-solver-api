@@ -130,7 +130,13 @@ pub fn analyse_game(
                 entropy_for_guess(*selected_index, &candidate_indices, feedback_table)
             })
             .unwrap_or_else(|| entropy_for_custom_guess(word, answers, &candidate_indices));
-        let score = score_outcome(word, answer_index, answers, &candidate_indices, feedback_table);
+        let score = score_outcome(
+            word,
+            answer_index,
+            answers,
+            &candidate_indices,
+            feedback_table,
+        );
         let maximum_entropy = (candidate_indices.len() as f64).log2();
 
         total_entropy += selected_entropy;
@@ -176,10 +182,7 @@ pub fn analyse_game(
     })
 }
 
-fn validate_game(
-    guesses: &[Guess],
-    answers: &[Word],
-) -> Result<Vec<(String, Vec<Guess>)>, String> {
+fn validate_game(guesses: &[Guess], answers: &[Word]) -> Result<Vec<(String, Vec<Guess>)>, String> {
     if guesses.is_empty() || guesses.len() > 30 || !guesses.len().is_multiple_of(5) {
         return Err("A game must contain between 1 and 6 complete rows.".to_string());
     }
@@ -368,7 +371,11 @@ fn score_outcome(
     }
 }
 
-fn entropy_for_custom_guess(guess_word: &str, answers: &[Word], candidate_indices: &[usize]) -> f64 {
+fn entropy_for_custom_guess(
+    guess_word: &str,
+    answers: &[Word],
+    candidate_indices: &[usize],
+) -> f64 {
     pattern_buckets_for_guess(guess_word, answers, candidate_indices, None)
         .into_iter()
         .filter(|count| *count > 0)
@@ -397,14 +404,12 @@ fn pattern_buckets_for_guess(
     candidate_indices: &[usize],
     feedback_table: Option<&FeedbackTable>,
 ) -> [u16; 243] {
-    if let Some((guess_index, _)) = feedback_table.and_then(|table| {
-        answers
-            .iter()
-            .position(|word| word.word == guess_word)
-            .map(|index| (index, table))
-    })
+    if let Some((guess_index, feedback_table)) = answers
+        .iter()
+        .position(|word| word.word == guess_word)
+        .zip(feedback_table)
     {
-        return pattern_buckets(guess_index, candidate_indices, feedback_table.expect("table exists"));
+        return pattern_buckets(guess_index, candidate_indices, feedback_table);
     }
 
     let guess = Word::new(guess_word.to_string(), false);
@@ -654,8 +659,12 @@ mod tests {
         let non_answer_win = row(0, "adieu", [Color::Green; 5]);
 
         // When
-        let unconventional_result =
-            analyse_game(&unconventional_guess, &answers, &legal_guesses, &feedback_table);
+        let unconventional_result = analyse_game(
+            &unconventional_guess,
+            &answers,
+            &legal_guesses,
+            &feedback_table,
+        );
         let non_answer_result =
             analyse_game(&non_answer_win, &answers, &legal_guesses, &feedback_table);
 

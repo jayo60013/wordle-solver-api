@@ -20,7 +20,7 @@ use std::{
     net::{IpAddr, Ipv4Addr},
 };
 
-use actix_web::{post, web, App, HttpResponse, HttpServer, ResponseError};
+use actix_web::{get, post, web, App, HttpResponse, HttpServer, ResponseError};
 use log::info;
 use std::env;
 
@@ -31,6 +31,11 @@ use crate::{
 
 const ALLOWED_GUESSES_FILENAME: &str = "wordle-nyt-allowed-guesses.txt";
 const ANSWERS_FILENAME: &str = "wordle-nyt-answers.txt";
+
+#[get("/health")]
+async fn health() -> HttpResponse {
+    HttpResponse::NoContent().finish()
+}
 
 #[post("/possible-words")]
 async fn possible_words(
@@ -163,6 +168,7 @@ async fn main() -> io::Result<()> {
             .wrap(cors)
             .wrap(Compress::default())
             .app_data(json_cfg)
+            .service(health)
             .service(possible_words)
             .service(game_analyses)
     })

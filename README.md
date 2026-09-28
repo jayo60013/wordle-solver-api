@@ -5,6 +5,7 @@ Wordle word list obtained [here](https://gist.github.com/cfreshman/a7b776506c732
 
 ## Endpoints
 
+- `GET /health` - returns `204 No Content` when the service is running. Intended for local container monitoring.
 - `POST /possible-words` - returns all possible words based on the constraints given by grey, yellow and green letters.
 - `POST /game-analyses` - validates a completed hard-mode win and returns skill, luck, and five best next guesses for each turn.
 
