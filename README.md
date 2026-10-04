@@ -9,6 +9,11 @@ Wordle word list obtained [here](https://gist.github.com/cfreshman/a7b776506c732
 - `POST /possible-words` - returns all possible words based on the constraints given by grey, yellow and green letters.
 - `POST /game-analyses` - validates a completed hard-mode win and returns skill, luck, and five best next guesses for each turn.
 
+Game analysis accepts winning words outside the official NYT answer list, including words
+outside the allowed guesses list. An unlisted answer is added to the candidate answers
+and recommended guesses for that analysis only. All words must still contain five
+lowercase ASCII letters, and feedback and hard-mode clues must be consistent.
+
 ### Game analysis payload
 
 ```json

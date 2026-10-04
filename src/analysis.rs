@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::borrow::Cow;
 
 use rayon::prelude::*;
 use serde::Serialize;
@@ -56,16 +56,31 @@ pub fn analyse_game(
     legal_guesses: &[Word],
     feedback_table: &FeedbackTable,
 ) -> Result<GameAnalysis, String> {
-    let rows = validate_game(guesses, answers)?;
+    let rows = validate_game(guesses)?;
     let answer = rows
         .last()
         .expect("validated game has a final row")
         .0
         .clone();
+    let mut answers = Cow::Borrowed(answers);
+    let mut legal_guesses = Cow::Borrowed(legal_guesses);
+    let custom_answer = !answers.iter().any(|word| word.word == answer);
+    if custom_answer {
+        answers.to_mut().push(Word::new(answer.clone(), true));
+        if let Some(word) = legal_guesses
+            .to_mut()
+            .iter_mut()
+            .find(|word| word.word == answer)
+        {
+            word.is_answer = true;
+        } else {
+            legal_guesses.to_mut().push(Word::new(answer.clone(), true));
+        }
+    }
     let answer_index = answers
         .iter()
         .position(|word| word.word == answer)
-        .expect("validated answer exists in answer list");
+        .expect("winning answer is included in analysis candidates");
 
     let mut prior_guesses = Vec::new();
     let mut turn_analysis = Vec::with_capacity(rows.len());
@@ -93,7 +108,15 @@ pub fn analyse_game(
             .map(|guess_index| {
                 (
                     *guess_index,
-                    entropy_for_guess(*guess_index, &candidate_indices, feedback_table),
+                    if custom_answer {
+                        entropy_for_custom_guess(
+                            &legal_guesses[*guess_index].word,
+                            &answers,
+                            &candidate_indices,
+                        )
+                    } else {
+                        entropy_for_guess(*guess_index, &candidate_indices, feedback_table)
+                    },
                 )
             })
             .collect::<Vec<_>>();
@@ -126,17 +149,12 @@ pub fn analyse_game(
 
         let selected_entropy = legal_word_indices
             .get(word.as_str())
+            .filter(|_| !custom_answer)
             .map(|selected_index| {
                 entropy_for_guess(*selected_index, &candidate_indices, feedback_table)
             })
-            .unwrap_or_else(|| entropy_for_custom_guess(word, answers, &candidate_indices));
-        let score = score_outcome(
-            word,
-            answer_index,
-            answers,
-            &candidate_indices,
-            feedback_table,
-        );
+            .unwrap_or_else(|| entropy_for_custom_guess(word, &answers, &candidate_indices));
+        let score = score_outcome(word, answer_index, &answers, &candidate_indices);
         let maximum_entropy = (candidate_indices.len() as f64).log2();
 
         total_entropy += selected_entropy;
@@ -182,16 +200,12 @@ pub fn analyse_game(
     })
 }
 
-fn validate_game(guesses: &[Guess], answers: &[Word]) -> Result<Vec<(String, Vec<Guess>)>, String> {
+fn validate_game(guesses: &[Guess]) -> Result<Vec<(String, Vec<Guess>)>, String> {
     if guesses.is_empty() || guesses.len() > 30 || !guesses.len().is_multiple_of(5) {
         return Err("A game must contain between 1 and 6 complete rows.".to_string());
     }
 
     let turn_count = guesses.len() / 5;
-    let answer_words = answers
-        .iter()
-        .map(|word| word.word.as_str())
-        .collect::<HashSet<_>>();
     let mut rows = Vec::with_capacity(turn_count);
 
     for turn in 0..turn_count {
@@ -233,14 +247,7 @@ fn validate_game(guesses: &[Guess], answers: &[Word]) -> Result<Vec<(String, Vec
     {
         return Err("The final row must be a winning guess with five green letters.".to_string());
     }
-    if !answer_words.contains(final_word.as_str()) {
-        return Err("The winning word must be an NYT Wordle answer.".to_string());
-    }
-
-    let answer = answers
-        .iter()
-        .find(|word| word.word == *final_word)
-        .expect("validated answer exists");
+    let answer = Word::new(final_word.clone(), true);
     for (word, row) in &rows {
         let guess = Word::new(word.clone(), answer.word == *word);
         if encode_pattern(row) != compute_pattern(guess.bytes, answer.bytes) {
@@ -328,10 +335,8 @@ fn score_outcome(
     answer_index: usize,
     answers: &[Word],
     candidate_indices: &[usize],
-    feedback_table: &FeedbackTable,
 ) -> TurnScore {
-    let buckets =
-        pattern_buckets_for_guess(guess_word, answers, candidate_indices, Some(feedback_table));
+    let buckets = pattern_buckets_for_guess(guess_word, answers, candidate_indices);
     let total = candidate_indices.len() as f64;
     let observed_pattern = compute_pattern(
         Word::new(guess_word.to_string(), false).bytes,
@@ -376,7 +381,7 @@ fn entropy_for_custom_guess(
     answers: &[Word],
     candidate_indices: &[usize],
 ) -> f64 {
-    pattern_buckets_for_guess(guess_word, answers, candidate_indices, None)
+    pattern_buckets_for_guess(guess_word, answers, candidate_indices)
         .into_iter()
         .filter(|count| *count > 0)
         .map(|count| {
@@ -402,16 +407,7 @@ fn pattern_buckets_for_guess(
     guess_word: &str,
     answers: &[Word],
     candidate_indices: &[usize],
-    feedback_table: Option<&FeedbackTable>,
 ) -> [u16; 243] {
-    if let Some((guess_index, feedback_table)) = answers
-        .iter()
-        .position(|word| word.word == guess_word)
-        .zip(feedback_table)
-    {
-        return pattern_buckets(guess_index, candidate_indices, feedback_table);
-    }
-
     let guess = Word::new(guess_word.to_string(), false);
     let mut buckets = [0u16; 243];
     for answer_index in candidate_indices {
@@ -651,12 +647,11 @@ mod tests {
     }
 
     #[test]
-    fn allows_non_wordle_guesses_but_rejects_invalid_winning_words() {
+    fn allows_non_wordle_guesses() {
         // Given
         let (answers, legal_guesses, feedback_table) = analysis_inputs();
         let mut unconventional_guess = row(0, "xxxxx", [Color::Grey; 5]);
         unconventional_guess.extend(row(1, "cigar", [Color::Green; 5]));
-        let non_answer_win = row(0, "adieu", [Color::Green; 5]);
 
         // When
         let unconventional_result = analyse_game(
@@ -665,14 +660,139 @@ mod tests {
             &legal_guesses,
             &feedback_table,
         );
-        let non_answer_result =
-            analyse_game(&non_answer_win, &answers, &legal_guesses, &feedback_table);
 
         // Then
         assert!(unconventional_result.is_ok());
+    }
+
+    #[test]
+    fn analyses_winning_words_outside_the_official_answer_list() {
+        let (answers, legal_guesses, feedback_table) = analysis_inputs();
+
+        for answer in ["adieu", "xxxxx"] {
+            let guesses = row(0, answer, [Color::Green; 5]);
+            let result = analyse_game(&guesses, &answers, &legal_guesses, &feedback_table).unwrap();
+
+            assert_eq!(result.answer, answer);
+            assert_eq!(result.turns, 1);
+            assert_eq!(result.turn_analysis[0].possible_answer_count_before, 3);
+            assert_eq!(result.turn_analysis[0].possible_answer_count_after, 1);
+            assert!(result.skill.score_percent.is_finite());
+            assert!(result.luck.score_percent.is_finite());
+            if answer == "adieu" {
+                let ranked_answer = result.turn_analysis[0]
+                    .best_guesses
+                    .iter()
+                    .find(|guess| guess.word == answer)
+                    .unwrap();
+                assert!(ranked_answer.is_answer);
+            }
+        }
+
+        assert_eq!(answers.len(), 2);
+        assert_eq!(legal_guesses.len(), 6);
+        assert!(!legal_guesses[2].is_answer);
+    }
+
+    #[test]
+    fn recommends_custom_answers_without_duplicate_guesses() {
+        let answers = vec![word("cigar", true)];
+        for legal_guesses in [
+            vec![word("cigar", true)],
+            vec![word("cigar", true), word("xxxxx", false)],
+        ] {
+            let feedback_table = FeedbackTable::new(&legal_guesses, &answers);
+            let guesses = feedback_row(0, "xxxxx", "xxxxx");
+
+            let result = analyse_game(&guesses, &answers, &legal_guesses, &feedback_table).unwrap();
+
+            assert_eq!(result.turn_analysis[0].best_guesses.len(), 2);
+            let custom_guesses = result.turn_analysis[0]
+                .best_guesses
+                .iter()
+                .filter(|guess| guess.word == "xxxxx")
+                .collect::<Vec<_>>();
+            assert_eq!(custom_guesses.len(), 1);
+            assert!(custom_guesses[0].is_answer);
+        }
+    }
+
+    #[test]
+    fn retains_custom_answer_after_official_candidates_are_eliminated() {
+        let (answers, legal_guesses, feedback_table) = analysis_inputs();
+        let mut guesses = feedback_row(0, "adieu", "xxxxx");
+        guesses.extend(feedback_row(1, "xxxxx", "xxxxx"));
+
+        let result = analyse_game(&guesses, &answers, &legal_guesses, &feedback_table).unwrap();
+
+        assert_eq!(result.turn_analysis[0].possible_answer_count_before, 3);
+        assert_eq!(result.turn_analysis[0].possible_answer_count_after, 1);
+        assert_eq!(result.turn_analysis[1].possible_answer_count_before, 1);
+        assert_eq!(result.turn_analysis[1].possible_answer_count_after, 1);
+        assert_eq!(result.turn_analysis[1].skill_percent, 100.0);
+        assert!(result.turn_analysis.iter().all(|turn| {
+            turn.skill_percent.is_finite()
+                && turn.luck_percent.is_finite()
+                && turn
+                    .best_guesses
+                    .iter()
+                    .all(|guess| guess.entropy_percent.is_finite())
+        }));
+        assert!(serde_json::to_value(&result).is_ok());
+    }
+
+    #[test]
+    fn custom_answers_match_analysis_with_explicitly_extended_word_lists() {
+        let (answers, legal_guesses, feedback_table) = analysis_inputs();
+        let mut guesses = feedback_row(0, "adieu", "sissy");
+        guesses.extend(feedback_row(1, "sissy", "sissy"));
+        let mut extended_answers = answers.clone();
+        extended_answers.push(word("sissy", true));
+        let mut extended_guesses = legal_guesses.clone();
+        extended_guesses.push(word("sissy", true));
+        let extended_table = FeedbackTable::new(&extended_guesses, &extended_answers);
+
+        let custom = analyse_game(&guesses, &answers, &legal_guesses, &feedback_table).unwrap();
+        let explicit = analyse_game(
+            &guesses,
+            &extended_answers,
+            &extended_guesses,
+            &extended_table,
+        )
+        .unwrap();
+
         assert_eq!(
-            error_message(non_answer_result),
-            "The winning word must be an NYT Wordle answer."
+            serde_json::to_value(custom).unwrap(),
+            serde_json::to_value(explicit).unwrap()
+        );
+    }
+
+    #[test]
+    fn custom_answers_still_require_correct_feedback_and_hard_mode() {
+        let (answers, legal_guesses, feedback_table) = analysis_inputs();
+        let mut incorrect_feedback = row(0, "adieu", [Color::Grey; 5]);
+        incorrect_feedback.extend(feedback_row(1, "sissy", "sissy"));
+        let mut ignores_clue = feedback_row(0, "stare", "sissy");
+        ignores_clue.extend(feedback_row(1, "adieu", "sissy"));
+        ignores_clue.extend(feedback_row(2, "sissy", "sissy"));
+
+        assert_eq!(
+            error_message(analyse_game(
+                &incorrect_feedback,
+                &answers,
+                &legal_guesses,
+                &feedback_table
+            )),
+            "Feedback for 'adieu' does not match the winning answer."
+        );
+        assert_eq!(
+            error_message(analyse_game(
+                &ignores_clue,
+                &answers,
+                &legal_guesses,
+                &feedback_table
+            )),
+            "'adieu' does not satisfy hard-mode clues from previous turns."
         );
     }
 
